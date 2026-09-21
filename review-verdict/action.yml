@@ -1,0 +1,81 @@
+---
+name: Review Verified
+description: >-
+  Decide the `Review Verified` state from CodeRabbit's own status description.
+
+# The fix for the failure that let three pull requests merge unreviewed on
+# 2026-08-19: CodeRabbit's `CodeRabbit` status reports success on a real
+# review, on a rate limited decline and on a skipped draft alike, so branch
+# protection cannot read a decision out of it. This reads the description
+# rather than the colour.
+
+inputs:
+  data:
+    description: >-
+      JSON object with is_draft, author, is_fork, pin_only_state and
+      coderabbit_description. Read from stdin when unset.
+    required: false
+    default: ""
+  bots:
+    description: >-
+      Newline separated dependency bots eligible for the pin-only lane.
+      Defaults to renovate[bot]. Set no-bots for a repository with no
+      `Pin Only` check, where nothing can resolve through that lane.
+    required: false
+    default: ""
+  no-bots:
+    description: Disable the pin-only lane entirely.
+    required: false
+    default: "false"
+
+outputs:
+  state:
+    description: pending, success or failure.
+    value: ${{ steps.decide.outputs.state }}
+  description:
+    description: The commit status description, flattened to one line.
+    value: ${{ steps.decide.outputs.description }}
+
+runs:
+  using: composite
+  steps:
+    - name: Decide the verdict
+      id: decide
+      shell: bash
+      env:
+        VERDICT_DATA: ${{ inputs.data }}
+        VERDICT_BOTS: ${{ inputs.bots }}
+        VERDICT_NO_BOTS: ${{ inputs.no-bots }}
+      run: |
+        set -o errexit
+        set -o pipefail
+        set -o nounset
+
+        args=()
+        if [ "${VERDICT_NO_BOTS}" = "true" ]; then
+          args+=(--no-bots)
+        else
+          while IFS= read -r bot; do
+            [ -n "${bot}" ] && args+=(--bot "${bot}")
+          done <<< "${VERDICT_BOTS}"
+        fi
+
+        library="$(cd "${GITHUB_ACTION_PATH}/.." && pwd)/src/review_verdict.py"
+        if [ ! -f "${library}" ]; then
+          echo "review-verdict: library not found at ${library}" >&2
+          exit 1
+        fi
+
+        if [ -n "${VERDICT_DATA}" ]; then
+          printf '%s' "${VERDICT_DATA}" > "${RUNNER_TEMP}/verdict-input.json"
+          source="${RUNNER_TEMP}/verdict-input.json"
+        else
+          source=/dev/stdin
+        fi
+
+        # The script already flattens the description to one line, because it
+        # embeds CodeRabbit's own text and a newline in a GITHUB_OUTPUT value
+        # would let the rest of it be parsed as a further output. That would
+        # let an unsanitised description set `state=success` on the very check
+        # meant to withhold it.
+        python3 "${library}" "${args[@]}" < "${source}" >> "${GITHUB_OUTPUT}"

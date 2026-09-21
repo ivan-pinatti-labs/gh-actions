@@ -74,6 +74,7 @@ a fork, which is the reading that cannot grant the unattended bot lane to
 something that should not have it.
 """
 
+import argparse
 import json
 import sys
 
@@ -89,7 +90,12 @@ import sys
 # ecosystems. Removed rather than left dormant, since a bot login this script
 # no longer expects to see, kept in the set anyway, is exactly the kind of
 # unattended-lane assumption that ambiguity above was about.
-BOTS = frozenset({"renovate[bot]"})
+# The dependency bots whose pull requests are eligible for the pin-only lane.
+# Configurable because ivan-pinatti-labs/.github has no `Pin Only` check at
+# all, so nothing there can resolve through that lane and the list has to be
+# empty; every other repository uses the default. A repository that later
+# gains the lane adds its bot here rather than to a second copy of this file.
+DEFAULT_BOTS = frozenset({"renovate[bot]"})
 
 # CodeRabbit's own in-flight states, observed live on real pull requests.
 # Neither is a decline: a review that is queued or actively running has not
@@ -101,7 +107,7 @@ BOTS = frozenset({"renovate[bot]"})
 IN_FLIGHT_DESCRIPTIONS = frozenset({"Review queued", "Review in progress"})
 
 
-def decide(data: dict) -> tuple[str, str]:
+def decide(data: dict, bots: frozenset[str] = DEFAULT_BOTS) -> tuple[str, str]:
     """Return (state, description) for `Review Verified`."""
     if data.get("is_draft"):
         return "pending", "waiting for ready for review"
@@ -116,7 +122,7 @@ def decide(data: dict) -> tuple[str, str]:
     is_fork = data.get("is_fork", True) is not False
     pin_only_state = data.get("pin_only_state", "")
 
-    if author in BOTS and not is_fork:
+    if author in bots and not is_fork:
         if pin_only_state == "success":
             return "success", "pin-only diff, nothing to review"
         if pin_only_state != "failure":
@@ -150,7 +156,38 @@ def decide(data: dict) -> tuple[str, str]:
     return "failure", f'CodeRabbit reports "{description}", which is not a review'
 
 
-def main() -> int:
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="review-verdict",
+        description="Decide the `Review Verified` state from a CodeRabbit status.",
+    )
+    parser.add_argument(
+        "--bot",
+        action="append",
+        default=None,
+        dest="bots",
+        help=(
+            "A dependency bot eligible for the pin-only lane. Repeatable. "
+            "Pass --no-bots for a repository with no pin-only lane."
+        ),
+    )
+    parser.add_argument(
+        "--no-bots",
+        action="store_true",
+        help="Disable the pin-only lane entirely.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(sys.argv[1:] if argv is None else argv)
+    if args.no_bots:
+        bots = frozenset()
+    elif args.bots:
+        bots = frozenset(args.bots)
+    else:
+        bots = DEFAULT_BOTS
+
     raw = sys.stdin.read()
     try:
         data = json.loads(raw)
@@ -162,7 +199,7 @@ def main() -> int:
         print("REFUSED: stdin JSON was not an object.", file=sys.stderr)
         return 1
 
-    state, description = decide(data)
+    state, description = decide(data, bots)
     # Both values are written to GITHUB_OUTPUT as `key=value` lines by the
     # caller, where a newline would let the rest of the value be parsed as a
     # further output: an unsanitised description could set `state=success` on

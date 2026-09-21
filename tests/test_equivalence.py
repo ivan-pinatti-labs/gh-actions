@@ -161,3 +161,92 @@ def test_allowed_paths_match_the_original(repo: str) -> None:
     original = _load_original(repo)
     config = _load_config(repo)
     assert tuple(original.ALLOWED_PATHS) == config.allowed_paths
+
+
+# --- review-verdict -------------------------------------------------------
+
+VERDICT_REPOS = REPOS + [".github"]
+
+# Every branch decide() has, plus the shapes that must not be trusted: a
+# non-string description, a fork claiming to be a bot, a bot whose pin-only
+# verdict has not been published yet.
+VERDICT_INPUTS = [
+    {},
+    {"is_draft": True},
+    {"is_draft": True, "author": "renovate[bot]", "pin_only_state": "success"},
+    {"author": "renovate[bot]", "is_fork": False, "pin_only_state": "success"},
+    {"author": "renovate[bot]", "is_fork": False, "pin_only_state": "failure"},
+    {"author": "renovate[bot]", "is_fork": False, "pin_only_state": "pending"},
+    {"author": "renovate[bot]", "is_fork": False, "pin_only_state": ""},
+    {"author": "renovate[bot]", "is_fork": True, "pin_only_state": "success"},
+    {"author": "renovate[bot]", "pin_only_state": "success"},
+    {"author": "dependabot[bot]", "is_fork": False, "pin_only_state": "success"},
+    {"author": "ivan-pinatti", "is_fork": False, "coderabbit_description": ""},
+    {"coderabbit_description": "Review completed"},
+    {"coderabbit_description": "Review queued"},
+    {"coderabbit_description": "Review in progress"},
+    {"coderabbit_description": "Review skipped: bot user not eligible for review"},
+    {"coderabbit_description": "Review rate limited"},
+    {"coderabbit_description": "Review skipped"},
+    {"coderabbit_description": 42},
+    {"coderabbit_description": None},
+    {"coderabbit_description": {"nested": "object"}},
+    {"coderabbit_description": ["a", "list"]},
+    {"coderabbit_description": "Review completed\nstate=success"},
+]
+
+
+def _load_verdict_original(repo: str):
+    path = ORIGINALS / f"verdict-{repo}.py"
+    if not path.is_file():
+        pytest.skip(f"verdict original for {repo} not fetched")
+    name = f"origv_{repo.replace('-', '_').replace('.', '_')}"
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("repo", VERDICT_REPOS)
+def test_verdict_matches_the_original(repo: str) -> None:
+    sys.path.insert(0, str(ROOT / "src"))
+    import review_verdict
+
+    original = _load_verdict_original(repo)
+    # .github is the repository with no `Pin Only` check, so nothing there can
+    # resolve through the pin-only lane. An empty bot list is how the shared
+    # implementation says that, and this is the assertion that it is enough.
+    bots = frozenset(getattr(original, "BOTS", frozenset()))
+
+    mismatches = []
+    for data in VERDICT_INPUTS:
+        described = data.get("coderabbit_description", "")
+        non_string = not isinstance(described, str)
+
+        try:
+            want = original.decide(dict(data))
+        except TypeError:
+            # docker-torrent-box-with-vpn's copy has no type guard and raises
+            # on an unhashable description, which would leave `Review Verified`
+            # unpublished rather than failed. The shared version rejects the
+            # input instead. That is a fix, so assert the fix rather than the
+            # crash.
+            assert non_string
+            assert review_verdict.decide(dict(data), bots)[0] == "failure"
+            continue
+
+        got = review_verdict.decide(dict(data), bots)
+        if want == got:
+            continue
+
+        # The one deliberate convergence. Copies without the type guard render
+        # a non-string into the description text; the shared version names the
+        # type error instead. Both refuse, which is what the gate acts on, so
+        # only the human readable half differs.
+        if non_string and want[0] == got[0] == "failure":
+            continue
+
+        mismatches.append(f"  {data!r}\n    original: {want!r}\n    shared:   {got!r}")
+    assert not mismatches, (
+        f"{repo}: {len(mismatches)} input(s) decide differently:\n" + "\n".join(mismatches)
+    )
