@@ -1,0 +1,20 @@
+# Reproduces devcontainer-images' scripts/assert-pin-only-diff.py exactly.
+allowed_paths:
+  - .pre-commit-config.yaml
+  - .github/workflows/
+  - images/base/Dockerfile
+
+arg_sources:
+  - file: images/base/Dockerfile
+    annotations:
+      - '^#\s*renovate:'
+
+rules:
+  - path: "*Dockerfile"
+    grammars: [docker_image_pin, arg_pin]
+
+# Block scalars are passed through on every path here, not only workflows.
+default_grammars:
+  - {name: action_sha, when: outside_block_scalar}
+  - {name: bare_action_version, when: outside_block_scalar}
+  - {name: rev_pin, when: outside_block_scalar}
