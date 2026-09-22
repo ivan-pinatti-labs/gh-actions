@@ -1,4 +1,4 @@
-# github-template agent instructions
+# gh-actions agent instructions
 
 Instructions for AI coding agents working in this repository. Claude Code
 reads them through `CLAUDE.md`; Codex and CodeRabbit read this file
@@ -77,18 +77,35 @@ and identifiers are fine.
 
 ## What this repository is
 
-A GitHub template repository: the starting point for a new project, with
-pre-commit, dependency automation, review automation, the merge pipeline and
-the community files already wired up.
+The shared half of this organization's merge pipeline. Six repositories each
+carried their own `assert-pin-only-diff.py` and seven carried
+`coderabbit-review-verdict.py`; this holds one of each, with what used to be
+hardcoded moved into configuration.
 
-- Everything here is copied into a new repository once, when it is created.
-  A change reaches only repositories created afterwards. Existing
-  repositories carry their own copies of these files (`docs/MERGE_PIPELINE.md`,
-  the workflows, `scripts/`), so a fix here usually needs the same change in
-  each of them.
-- `REPLACE_ME` placeholders stay placeholders. They are what "Using this
-  template" in `README.md` tells a new repository's owner to fill in.
-- Keep the steps in "Using this template" in step with the files they
-  describe. `docs/STARTER_README.md` becomes a new repository's `README.md`.
-- In a repository created from this template, replace this section with that
-  project's own specifics and keep "Organization conventions" unchanged.
+- **Consumers pin a SHA, never a tag or a branch.** A fix here reaches them
+  when Renovate bumps that pin, and because bumping a pinned `uses:` is itself
+  a pin-only diff, the bot lane merges it unattended. A floating tag would
+  break that guarantee for every consumer at once.
+- **This repository gates seven others' merges.** Treat a change here as
+  affecting all of them, not just this one. That is the reason its own
+  protection is the strictest in the organization.
+- **Do not converge two grammars because they look alike.** They decide what a
+  dependency bot may merge without a person reading the diff, and two of them
+  differed in ways reading did not reveal: `docker-torrent-box-with-vpn`
+  strips the action SHA and the image digest where every other copy
+  substitutes a placeholder. Keep both under distinct names; converging one is
+  its own change, with `tests/test_equivalence.py` extended to prove it alters
+  no verdict.
+- **`examples/` is not documentation.** Each file reproduces one consumer's
+  previous script exactly, and the equivalence suite asserts it. Editing one
+  changes what that repository's test compares against.
+- **Nothing runs on the host.** `make test` builds the development container
+  and runs the suite inside it. The host has no toolchain: this organization
+  removed asdf on 2026-09-19, so a host `pre-commit`, `npx` or `pytest` either
+  fails with "No version is set" or is the wrong one.
+- **Reusable workflows read the library through `job.workflow_sha`**, so a
+  consumer pinning the workflow pins its grading code too, with no second pin
+  to drift. A relative `uses: ./` would resolve against the caller's checkout
+  instead and silently grade with the wrong copy. `actionlint` 1.7.12 reports
+  those `job` properties as undefined; they were added on 2026-04-23 and
+  `.github/actionlint.yaml` scopes the ignore to them.

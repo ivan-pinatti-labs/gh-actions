@@ -187,24 +187,27 @@ repos:
   # perfectly well the whole time.
   #
   # cffconvert is the reference implementation's own validator and would have
-  # caught it, but it cannot run against this file while the REPLACE_ME
-  # placeholders are still in place: `date-released: "REPLACE_ME_DATE"` is not
-  # a date, and the schema says so. Filling a real date in to satisfy it would
-  # remove the placeholder from the `REPLACE_ME` search the README tells you
-  # to run, which is worse than the check being absent.
+  # caught it. The template ships this commented out, because it cannot run
+  # while `date-released: "REPLACE_ME_DATE"` is still a placeholder rather than
+  # a date. This repository's placeholders are filled in, so it is enabled, as
+  # the template's own note says to do.
   #
-  # So: once the placeholders in CITATION.cff are filled in, uncomment this.
+  # Run as a repo: local hook since cffconvert ships no
+  # `.pre-commit-hooks.yaml`. Its version is pinned in
+  # `additional_dependencies`, which the native pre-commit manager does not
+  # read, so that pin moves by hand.
+  #
   # pass_filenames is false with the path written out because cffconvert takes
-  # its input through `-i` and rejects a bare positional argument; `files:`
-  # still scopes it to that one file.
-  #
-  # - repo: local
-  #   hooks:
-  #     - id: cffconvert-validate
-  #       name: cffconvert --validate (CITATION.cff)
-  #       language: python
-  #       additional_dependencies: ["cffconvert==2.0.0"]
-  #       entry: cffconvert --validate -i CITATION.cff
-  #       files: ^CITATION\.cff$
-  #       pass_filenames: false
-  #       stages: [pre-commit]
+  # its input through `-i` and rejects a bare positional argument, so an
+  # appended filename would fail the hook on a valid file. `files:` still
+  # scopes it to that one file.
+  - repo: local
+    hooks:
+      - id: cffconvert-validate
+        name: Validate CITATION.cff against the CFF schema
+        language: python
+        additional_dependencies: ["cffconvert==2.0.0"]
+        entry: cffconvert --validate -i CITATION.cff
+        files: ^CITATION\.cff$
+        pass_filenames: false
+        stages: [pre-commit]
