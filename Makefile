@@ -6,7 +6,7 @@
 # one line. Splitting one across lines leaves the trailing targets invisible
 # to it, and the phonydeclared and minphony rules then report them as
 # undeclared. Tracked upstream as checkmake#280.
-.PHONY: all help shell
+.PHONY: all help shell test
 
 # Bare `make` shows the target list rather than doing something surprising.
 # checkmake's minphony rule also wants `all` declared phony; see checkmake.ini.
@@ -20,6 +20,7 @@ help:
 		'Targets:' \
 		'  help                        Show this message.' \
 		'  shell                       Open a shell inside the development container.' \
+		'  test                        Run the equivalence suite in that container.' \
 		'' \
 		'Variables:' \
 		'  DEV_IMAGE                   Tag for the development image.' \
@@ -110,3 +111,24 @@ shell:
 		$(SHELL_EXTRA_MOUNTS) \
 		--workdir "$(CURDIR)" \
 		$(DEV_IMAGE) bash
+
+
+# The test suite, in the development container rather than on the host.
+#
+# A target rather than an instruction to run pytest, because the host's python
+# is not this project's python: nothing in this organization installs a
+# toolchain on the host any more, and a suite that happens to pass against
+# whatever the host has says nothing about the container CI and every
+# contributor actually use. This is also the only place the originals get
+# fetched, so the comparison is against the real published copies.
+test:
+	@echo "Building the development container..."
+	@podman build --file .devcontainer/Dockerfile --tag $(DEV_IMAGE) .
+	@podman run --rm \
+		--userns=keep-id:uid=1000,gid=1000 \
+		--security-opt label=type:container_engine_t \
+		--security-opt label=level:s0:c555,c666 \
+		-v "$(CURDIR):$(CURDIR):rw,Z" \
+		$(_shell_gh_token) \
+		--workdir "$(CURDIR)" \
+		$(DEV_IMAGE) bash -lc 'tools/fetch-originals.sh && python3 -m pytest tests/ -v'
