@@ -19,6 +19,11 @@ USER 0:0
 # other repositories it carries keys for (NodeSource and HashiCorp), and the
 # reasoning behind all of this.
 #
+# python3-pytest and python3-yaml are what this repository's own suite needs:
+# pytest to run the equivalence tests, and PyYAML because the pin-only library
+# reads its configuration from YAML. Both come from Ubuntu rather than pip,
+# for the same provenance reason the rest of this organization does.
+#
 # A project created from this template adds what it needs here. Prefer a
 # distribution package, then a vendor's own signed apt repository, then the
 # tool's official container image. There is no version manager in this
@@ -40,6 +45,8 @@ RUN printf '%s\n' \
   && apt-get install -y --no-install-recommends \
     gh \
     pre-commit \
+    python3-pytest \
+    python3-yaml \
   && rm -rf /var/lib/apt/lists/*
 
 USER 1000:1000

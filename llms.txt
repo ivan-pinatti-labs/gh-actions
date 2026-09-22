@@ -1,28 +1,38 @@
-# REPLACE_ME_PROJECT_NAME
+# gh-actions
 
-> REPLACE_ME_ONE_LINE_DESCRIPTION
+> Shared GitHub Actions and reusable workflows for the ivan-pinatti-labs merge
+> pipeline: one configurable implementation of the pin-only diff check and the
+> CodeRabbit review verdict, published as composite actions, plus the gate and
+> bot auto-merge workflows that use them.
 > Apache License 2.0. Author: Ivan Pinatti (https://github.com/ivan-pinatti).
-> Canonical repository: https://github.com/REPLACE_ME_OWNER/REPLACE_ME_REPO_NAME
+> Canonical repository: https://github.com/ivan-pinatti-labs/gh-actions
 
 ## What it does
 
-This file is a placeholder generated from the `github-template` template
-repository. Fill it in once you know what the new project actually does,
-following the shape below, or delete it if you do not want an `llms.txt`
-in your project.
+Six repositories each carried their own copy of `assert-pin-only-diff.py` and
+seven carried `coderabbit-review-verdict.py`, roughly 14800 lines maintained in
+parallel, and only two of the six tested the pin-only check at all. This
+repository holds one implementation of each, with what used to be hardcoded
+moved into a YAML configuration and action inputs.
+
+A consumer pins a SHA. A fix here reaches it when Renovate bumps that pin, and
+because bumping a pinned `uses:` is itself a pin-only diff, the bot lane
+approves and merges it without a person.
 
 ## Key files
 
-- [README.md](README.md): Pitch, quickstart, and usage
-- REPLACE_ME_WITH_YOUR_KEY_FILES_AND_A_SHORT_DESCRIPTION_OF_EACH
-
-## Tech stack
-
-- REPLACE_ME_WITH_YOUR_LANGUAGES_AND_TOOLS
+- [src/pin_only.py](src/pin_only.py): The pin-only diff engine, grammars and configuration
+- [src/review_verdict.py](src/review_verdict.py): The `Review Verified` decision
+- [pin-only/action.yml](pin-only/action.yml): Composite action wrapping the pin-only check
+- [review-verdict/action.yml](review-verdict/action.yml): Composite action wrapping the verdict
+- [.github/workflows/reusable-coderabbit-gate.yml](.github/workflows/reusable-coderabbit-gate.yml): The gate, as a reusable workflow
+- [examples/](examples/): A configuration per consumer, reproducing its previous script exactly
+- [tests/test_equivalence.py](tests/test_equivalence.py): Proves that reproduction, per repository
 
 ## Conventions
 
-- Conventional Commits for commit messages, no ticket prefix baked in
-- pre-commit hooks wired up via
-  [ivan-pinatti-labs/pre-commit-checklists](https://github.com/ivan-pinatti-labs/pre-commit-checklists),
-  see [.pre-commit-config.yaml](.pre-commit-config.yaml)
+- Nothing runs on the host. `make test` builds the development container and
+  runs the suite inside it.
+- Grammars are kept separate rather than converged where two repositories
+  behaved differently, because these decide what a dependency bot may merge
+  unattended. Converging one is a change with its own test, not a tidy up.

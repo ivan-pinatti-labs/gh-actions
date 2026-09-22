@@ -1,0 +1,25 @@
+---
+# What a dependency bot may change here without a person reading the diff.
+#
+# Read from the default branch by the gate, never from the pull request being
+# graded, so a bot cannot widen its own lane. This file is deliberately absent
+# from allowed_paths for the same reason: a bump that edits it is not pin-only
+# and waits for a person.
+allowed_paths:
+  - .pre-commit-config.yaml
+  - .github/workflows/
+  - .devcontainer/Dockerfile
+
+rules:
+  - path: .devcontainer/Dockerfile
+    grammars: [image_digest]
+  - path: .github/workflows/
+    grammars:
+      - name: action_sha
+        when: outside_block_scalar
+      - name: bare_action_version
+        when: outside_block_scalar
+      - name: rev_pin
+        when: outside_block_scalar
+
+default_grammars: [action_sha, bare_action_version, rev_pin]

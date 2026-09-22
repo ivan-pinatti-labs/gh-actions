@@ -1,0 +1,18 @@
+---
+# actionlint 1.7.12 does not know the `job` context properties GitHub added on
+# 2026-04-23, so it reports them as undefined. They are real, and they are the
+# reason the reusable workflow here can be pinned by SHA at all: a called
+# workflow uses them to check out its own repository at its own commit, which
+# is the pattern GitHub's own contexts reference documents.
+#
+#   https://docs.github.com/en/actions/reference/workflows-and-actions/contexts
+#
+# Scoped to the two properties and the one file rather than silenced globally,
+# so a genuinely undefined property in any other expression still fails. Remove
+# this once the pinned actionlint carries the newer schema; Renovate bumps that
+# pin, so the check is whether this file is still needed after a bump.
+paths:
+  .github/workflows/reusable-coderabbit-gate.yml:
+    ignore:
+      - 'property "workflow_repository" is not defined'
+      - 'property "workflow_sha" is not defined'

@@ -1,0 +1,131 @@
+---
+name: Pin Only
+description: >-
+  Refuse a unified diff that changes anything but a dependency pin, and publish
+  the verdict.
+
+# The script this runs ships with the action, at $GITHUB_ACTION_PATH, so the
+# calling repository never holds a copy and a pull request cannot rewrite the
+# check that decides whether it merges unattended. That is stronger than the
+# arrangement it replaces, where the script lived in the repository and the
+# gate had to check out the default branch to be sure it was reading the
+# reviewed copy.
+
+inputs:
+  diff:
+    description: Path to a file holding the unified diff. Reads stdin when unset.
+    required: false
+    default: ""
+  config:
+    description: >-
+      YAML configuration, relative to repo-root. Absent is allowed: a
+      repository may configure everything through allowed-paths below.
+    required: false
+    default: .github/pin-only.yml
+  repo-root:
+    description: Repository root the configuration's paths resolve against.
+    required: false
+    default: "."
+  allowed-paths:
+    description: >-
+      Newline separated override for the configuration's allowed_paths. Set
+      this or the file, or both; this wins.
+    required: false
+    default: ""
+  grammars:
+    description: Newline separated override for default_grammars.
+    required: false
+    default: ""
+
+outputs:
+  verdict:
+    description: >-
+      "pin-only" or "refused". Both are written before the step exits, but a
+      refusal exits non-zero and so fails this action. A caller that needs to
+      read these outputs on a refusal, to publish a commit status from them
+      rather than just to stop, has to say so: `continue-on-error: true` on
+      this step, or `if: ${{ always() }}` on the step that reads them.
+    value: ${{ steps.check.outputs.verdict }}
+  summary:
+    description: One line suitable for a commit status description.
+    value: ${{ steps.check.outputs.summary }}
+
+runs:
+  using: composite
+  steps:
+    - name: Grade the diff
+      id: check
+      shell: bash
+      env:
+        PIN_ONLY_DIFF: ${{ inputs.diff }}
+        PIN_ONLY_CONFIG: ${{ inputs.config }}
+        PIN_ONLY_REPO_ROOT: ${{ inputs.repo-root }}
+        PIN_ONLY_ALLOWED_PATHS: ${{ inputs.allowed-paths }}
+        PIN_ONLY_GRAMMARS: ${{ inputs.grammars }}
+      run: |
+        set -o errexit
+        set -o pipefail
+        set -o nounset
+
+        args=(--repo-root "${PIN_ONLY_REPO_ROOT}")
+
+        # An absent default configuration is not an error, because a
+        # repository may pass everything by input. An absent configuration
+        # that was asked for by name is, because that is a typo rather than a
+        # choice, and continuing would grade with whatever the inputs happened
+        # to say.
+        if [ -n "${PIN_ONLY_CONFIG}" ]; then
+          if [ -f "${PIN_ONLY_REPO_ROOT}/${PIN_ONLY_CONFIG}" ]; then
+            args+=(--config "${PIN_ONLY_REPO_ROOT}/${PIN_ONLY_CONFIG}")
+          elif [ "${PIN_ONLY_CONFIG}" != ".github/pin-only.yml" ]; then
+            echo "pin-only: no such configuration: ${PIN_ONLY_CONFIG}" >&2
+            exit 1
+          fi
+        fi
+
+        while IFS= read -r path; do
+          [ -n "${path}" ] && args+=(--allowed-path "${path}")
+        done <<< "${PIN_ONLY_ALLOWED_PATHS}"
+
+        while IFS= read -r grammar; do
+          [ -n "${grammar}" ] && args+=(--grammar "${grammar}")
+        done <<< "${PIN_ONLY_GRAMMARS}"
+
+        if [ -n "${PIN_ONLY_DIFF}" ]; then
+          exec_input=("${PIN_ONLY_DIFF}")
+        else
+          exec_input=(/dev/stdin)
+        fi
+
+        # $GITHUB_ACTION_PATH is this action's own directory inside the
+        # checked out action repository, so the library sits one level up. It
+        # travels with the action: the calling repository holds no copy, which
+        # is the point.
+        library="$(cd "${GITHUB_ACTION_PATH}/.." && pwd)/src/pin_only.py"
+        if [ ! -f "${library}" ]; then
+          echo "pin-only: library not found at ${library}" >&2
+          exit 1
+        fi
+
+        # Captured rather than streamed, so the verdict and the operator
+        # facing output are the same text. The exit status is read
+        # deliberately: a refusal is an expected outcome that has to reach the
+        # outputs below, not a step failure that skips them.
+        #
+        # It is still propagated at the end, so a refusal fails this action.
+        # That is the right default, since most callers want to stop. A caller
+        # that wants the outputs anyway needs `continue-on-error: true` here or
+        # `if: ${{ always() }}` on whatever reads them; see the `verdict`
+        # output's description.
+        set +o errexit
+        output="$(python3 "${library}" "${args[@]}" < "${exec_input[0]}")"
+        status=$?
+        set -o errexit
+
+        printf '%s\n' "${output}"
+        {
+          echo "verdict=$([ "${status}" -eq 0 ] && echo pin-only || echo refused)"
+          echo "summary=$(printf '%s' "${output}" | head -1 | cut -c1-140)"
+        } >> "${GITHUB_OUTPUT}"
+
+        exit "${status}"

@@ -1,0 +1,23 @@
+# Reproduces pre-commit-checklists-demo's scripts/assert-pin-only-diff.py.
+allowed_paths:
+  - .pre-commit-config.yaml
+  - requirements.txt
+  - tests/requirements.txt
+  - .github/workflows/
+  - .devcontainer/Dockerfile
+
+rules:
+  - path: "*requirements.txt"
+    grammars: [requirement_line]
+  - path: .devcontainer/Dockerfile
+    grammars: [image_digest]
+  - path: .github/workflows/
+    grammars:
+      - name: action_sha
+        when: outside_block_scalar
+      - name: bare_action_version
+        when: outside_block_scalar
+      - name: rev_pin
+        when: outside_block_scalar
+
+default_grammars: [action_sha, bare_action_version, rev_pin]

@@ -29,3 +29,4 @@ CLAUDE.local.md
 .claude/settings.local.json
 .claude/agents/local/
 .claude/worktrees/
+tests/originals/

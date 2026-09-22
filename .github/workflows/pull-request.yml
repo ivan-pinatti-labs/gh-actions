@@ -257,3 +257,78 @@ jobs:
               issue_number: context.issue.number,
               body: commentBody,
             });
+
+  renovate-config:
+    name: Renovate Config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate renovate.json5
+        shell: bash
+        run: npx --yes --package renovate@44.69.12 renovate-config-validator --strict
+
+  # The equivalence suite, which is the reason this repository can replace six
+  # separate implementations at all: it runs each original's own grading
+  # functions against this one's, and requires identical answers. It needs the
+  # originals, so it fetches them; without network access it skips rather than
+  # fails, which is the right behaviour for a fresh clone but not for CI, so
+  # the fetch is a separate step that is allowed to fail loudly.
+  self-test:
+    name: Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          ref: ${{ github.head_ref || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v6.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Python-based tooling
+        run: pip install pytest pyyaml
+
+      - name: Fetch the originals this suite compares against
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/fetch-originals.sh
+
+      # A skip is a pass to pytest and must not be one here. The equivalence
+      # tests skip when the originals are absent, which is right for a local
+      # clone with no network and wrong for CI: a suite that compared nothing
+      # would report success and the whole basis for replacing six
+      # implementations would go unchecked.
+      - name: Run the equivalence suite
+        run: |
+          set -o errexit
+          set -o pipefail
+          set -o nounset
+          python3 -m pytest tests/ -v --junitxml=pytest-results.xml
+          skipped=$(python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("pytest-results.xml").getroot()
+          suites = [root] if root.tag == "testsuite" else list(root)
+          print(sum(int(s.get("skipped", 0)) for s in suites))
+          PY
+          )
+          if [ "${skipped}" -ne 0 ]; then
+            echo "::error::${skipped} test(s) skipped. In CI a skipped" \
+              "comparison is a failure: it means the suite graded nothing."
+            exit 1
+          fi
