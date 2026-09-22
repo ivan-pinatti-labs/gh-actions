@@ -417,6 +417,7 @@ jobs:
           CALLER_REPOSITORY: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -429,10 +430,36 @@ jobs:
                 "library from the commit under test."
               exit 1
             fi
-            ref="${DEFAULT_BRANCH}"
-            echo "::notice::Same-repository merge_group run: reading the" \
-              "library from ${DEFAULT_BRANCH} rather than from the queue's" \
-              "temporary commit."
+
+            # The one case where the queue's commit has to be trusted: the
+            # library does not exist on the default branch yet, because the
+            # pull request in the queue is the one introducing it. Refusing
+            # here would deadlock the repository permanently, since the change
+            # that would fix it is the change that cannot merge.
+            #
+            # Safe precisely because it is that case. There is no reviewed copy
+            # on the default branch to prefer, so "read the reviewed copy
+            # instead" has no meaning, and the window closes for good the
+            # moment this merges. Reaching it later would need write access to
+            # the default branch to delete the library first, which is strictly
+            # more access than this is protecting against.
+            library_on_default=false
+            if gh api \
+              "repos/${CALLER_REPOSITORY}/contents/src/pin_only.py?ref=${DEFAULT_BRANCH}" \
+              --jq .sha >/dev/null 2>&1; then
+              library_on_default=true
+            fi
+
+            if [ "${library_on_default}" = "true" ]; then
+              ref="${DEFAULT_BRANCH}"
+              echo "::notice::Same-repository merge_group run: reading the" \
+                "library from ${DEFAULT_BRANCH} rather than from the queue's" \
+                "temporary commit."
+            else
+              echo "::warning::Bootstrap: no library on ${DEFAULT_BRANCH} yet," \
+                "so reading it from the queue commit. This is expected exactly" \
+                "once, for the pull request that introduces it."
+            fi
           fi
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
