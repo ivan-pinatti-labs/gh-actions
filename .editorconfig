@@ -35,3 +35,17 @@ trim_trailing_whitespace = false
 
 [Makefile]
 indent_style = tab
+
+# Unified diff fixtures. A diff's leading column is its own marker (space, `+`
+# or `-`) followed by the indentation of the file it describes, so the padding
+# is not this repository's to normalize: editing it would change what the
+# fixture tests. tests/originals/ is the six upstream copies, fetched verbatim.
+[tests/fixtures/*.diff]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = false
+
+[tests/originals/**]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = false

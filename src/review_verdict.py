@@ -119,6 +119,13 @@ def decide(data: dict, bots: frozenset[str] = DEFAULT_BOTS) -> tuple[str, str]:
     # `False`, "not a fork", for exactly the values this is meant to treat as
     # unrecognized. Only the literal `False` may open the bot lane, so the
     # comparison is against that value rather than through a cast.
+    # Guarded for the same reason `coderabbit_description` is below: a valid
+    # JSON payload can carry a list or an object here, and `author in bots`
+    # raises TypeError on an unhashable value. That fails the step rather than
+    # the check, so `Review Verified` is never published, and a context that
+    # never arrives reads as "still running" instead of as a refusal.
+    if not isinstance(author, str):
+        return "failure", "author was not a string"
     is_fork = data.get("is_fork", True) is not False
     pin_only_state = data.get("pin_only_state", "")
 

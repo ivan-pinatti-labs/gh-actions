@@ -115,6 +115,12 @@ shell:
 
 # The test suite, in the development container rather than on the host.
 #
+# `;` rather than `&&` after the fetch on purpose. The equivalence tests skip
+# when the originals are absent, so a developer with no network still gets the
+# rest of the suite. CI keeps the fetch as its own step, where a failure is
+# loud, because there a skipped comparison is exactly what must not pass
+# silently.
+#
 # A target rather than an instruction to run pytest, because the host's python
 # is not this project's python: nothing in this organization installs a
 # toolchain on the host any more, and a suite that happens to pass against
@@ -131,4 +137,4 @@ test:
 		-v "$(CURDIR):$(CURDIR):rw,Z" \
 		$(_shell_gh_token) \
 		--workdir "$(CURDIR)" \
-		$(DEV_IMAGE) bash -lc 'tools/fetch-originals.sh && python3 -m pytest tests/ -v'
+		$(DEV_IMAGE) bash -lc 'tools/fetch-originals.sh; python3 -m pytest tests/ -v'

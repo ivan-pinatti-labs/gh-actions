@@ -136,14 +136,18 @@ repos:
         stages: [pre-commit]
 
       # check-ast, check-builtin-literals, debug-statements,
-      # requirements-txt-fixer, ruff-check --fix, ruff-format. Scoped to
-      # scripts/, not the whole repo: this template stays language-agnostic,
-      # and the only Python here is the merge pipeline's two verdict scripts
-      # (src/pin_only.py, src/review_verdict.py).
-      # Drop this id, or widen the selector, once the repo created from this
-      # template actually is a Python project.
+      # requirements-txt-fixer, ruff-check --fix, ruff-format.
+      #
+      # This is a Python project, so the selector is the whole tree rather
+      # than the template's `^scripts/.*\.py$`. That selector was inherited
+      # and left behind when the grading code moved to src/, which matched
+      # nothing: every Python hook here reported success over zero files,
+      # including on the code the merge gate executes with `statuses: write`.
+      # tests/originals/ is excluded because it holds the six copies this
+      # library replaces, fetched verbatim and deliberately not edited.
       - id: checklist-dev-python
-        files: ^scripts/.*\.py$
+        files: \.py$
+        exclude: ^tests/originals/
         stages: [pre-commit]
 
       # checkmake over the Makefile this template now ships. Read the

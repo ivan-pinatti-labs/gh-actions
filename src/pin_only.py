@@ -46,6 +46,7 @@ import sys
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
+
 RELEASE = r"v?[0-9][0-9A-Za-z.+_-]*"
 
 # A pre-commit hook `rev:`. The prefix is captured and put back, so that a
@@ -211,7 +212,6 @@ def _normalize_action_pin(match: re.Match[str]) -> str:
     return normalized
 
 
-
 def _normalize_bare_action_version(match: re.Match[str]) -> str:
     # `# <version>` is appended here too, matching what _normalize_action_pin
     # produces for the pinned side: a first-time pin gains its release
@@ -330,9 +330,7 @@ GRAMMARS: dict[str, object] = {
     ),
     "digest": lambda line, cfg: DIGEST.sub("@sha256:<digest>", line),
     "digest_strip": lambda line, cfg: DIGEST.sub("", line),
-    "action_sha_strip": lambda line, cfg: ACTION_SHA_STRIP.sub(
-        _strip_action_sha, line
-    ),
+    "action_sha_strip": lambda line, cfg: ACTION_SHA_STRIP.sub(_strip_action_sha, line),
     "bare_action_version_strip": lambda line, cfg: BARE_ACTION_VERSION_STRIP.sub(
         _strip_bare_action_version, line
     ),
@@ -529,8 +527,10 @@ def _validate(config: Config) -> None:
                 "expected 'always' or 'outside_block_scalar'."
             )
 
+
 # The configuration the module-level helpers read when none is passed in.
 _ACTIVE = Config()
+
 
 def _line_indent(line: str) -> int:
     return len(line) - len(line.lstrip(" \t"))
@@ -836,14 +836,27 @@ def parse(diff: str) -> tuple[dict[str, tuple[Counter, Counter]], list[str]]:
         if path is None:
             continue
 
+        # `True` when the marks are missing, but only for the files the marks
+        # are computed for at all. _whole_file_block_scalars only reads
+        # `.github/workflows/`, so for every other path the absence of marks
+        # means "not a file with block scalars in it", not "could not tell".
+        # Defaulting those to True said the opposite, and a configuration whose
+        # grammars are all `outside_block_scalar` then normalized nothing
+        # outside a workflow: a plain `rev:` bump in .pre-commit-config.yaml was
+        # refused under examples/devcontainer-images.yml while passing under
+        # examples/rsync-crypt.yml. Safe, in that it refuses rather than
+        # approves, and still wrong: the lane the file exists to permit stopped
+        # working.
+        graded_for_scalars = path.startswith(".github/workflows/")
+
         if line.startswith("-"):
             content = line[1:]
-            in_scalar = marks[0][old_number] if marks else True
+            in_scalar = marks[0][old_number] if marks else graded_for_scalars
             changes[path][0][normalize(content, path, in_scalar)] += 1
             old_number += 1
         elif line.startswith("+"):
             content = line[1:]
-            in_scalar = marks[1][new_number] if marks else True
+            in_scalar = marks[1][new_number] if marks else graded_for_scalars
             changes[path][1][normalize(content, path, in_scalar)] += 1
             new_number += 1
         elif line.startswith(" ") or line == "":

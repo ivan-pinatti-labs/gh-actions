@@ -39,7 +39,12 @@ inputs:
 
 outputs:
   verdict:
-    description: '"pin-only" or "refused".'
+    description: >-
+      "pin-only" or "refused". Both are written before the step exits, but a
+      refusal exits non-zero and so fails this action. A caller that needs to
+      read these outputs on a refusal, to publish a commit status from them
+      rather than just to stop, has to say so: `continue-on-error: true` on
+      this step, or `if: ${{ always() }}` on the step that reads them.
     value: ${{ steps.check.outputs.verdict }}
   summary:
     description: One line suitable for a commit status description.
@@ -106,6 +111,12 @@ runs:
         # facing output are the same text. The exit status is read
         # deliberately: a refusal is an expected outcome that has to reach the
         # outputs below, not a step failure that skips them.
+        #
+        # It is still propagated at the end, so a refusal fails this action.
+        # That is the right default, since most callers want to stop. A caller
+        # that wants the outputs anyway needs `continue-on-error: true` here or
+        # `if: ${{ always() }}` on whatever reads them; see the `verdict`
+        # output's description.
         set +o errexit
         output="$(python3 "${library}" "${args[@]}" < "${exec_input[0]}")"
         status=$?

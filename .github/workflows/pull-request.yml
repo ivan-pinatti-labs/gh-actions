@@ -309,5 +309,26 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: tools/fetch-originals.sh
 
+      # A skip is a pass to pytest and must not be one here. The equivalence
+      # tests skip when the originals are absent, which is right for a local
+      # clone with no network and wrong for CI: a suite that compared nothing
+      # would report success and the whole basis for replacing six
+      # implementations would go unchecked.
       - name: Run the equivalence suite
-        run: python3 -m pytest tests/ -v
+        run: |
+          set -o errexit
+          set -o pipefail
+          set -o nounset
+          python3 -m pytest tests/ -v --junitxml=pytest-results.xml
+          skipped=$(python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("pytest-results.xml").getroot()
+          suites = [root] if root.tag == "testsuite" else list(root)
+          print(sum(int(s.get("skipped", 0)) for s in suites))
+          PY
+          )
+          if [ "${skipped}" -ne 0 ]; then
+            echo "::error::${skipped} test(s) skipped. In CI a skipped" \
+              "comparison is a failure: it means the suite graded nothing."
+            exit 1
+          fi

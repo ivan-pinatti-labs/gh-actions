@@ -392,14 +392,55 @@ jobs:
 
       # The library is read from this workflow's own repository at the very
       # commit the caller pinned, through job.workflow_sha. That is what keeps
-      # the SHA pin meaningful: a caller that pins this workflow gets that
-      # commit's grading code too, with no second pin to drift, and nothing
-      # here is readable by the pull request being graded.
+      # the SHA pin meaningful for a consumer: pinning this workflow pins that
+      # commit's grading code too, with no second pin to drift, and none of it
+      # is reachable by the pull request being graded.
+      #
+      # The exception is a repository calling this workflow from itself by
+      # relative path, which is only this one. GitHub then resolves the
+      # workflow, and so job.workflow_sha, from the caller's own commit. On
+      # `pull_request_target` that is the base branch and fine; under
+      # `merge_group` it is the queue's temporary commit, which contains the
+      # pull request's changes. Reading the library from there would hand the
+      # code under test a job holding `statuses: write` and let it publish its
+      # own `Pin Only` verdict.
+      #
+      # So the ref is resolved rather than used raw: a same-repository call
+      # under `merge_group` reads the library from the default branch instead.
+      # A consumer pinning a SHA is unaffected, because its
+      # job.workflow_repository is this repository and not its own.
+      - name: Resolve the ref to read the library from
+        id: library_ref
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          CALLER_REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="${WORKFLOW_SHA}"
+          if [ "${WORKFLOW_REPOSITORY}" = "${CALLER_REPOSITORY}" ] \
+            && [ "${EVENT_NAME}" = "merge_group" ]; then
+            if [ -z "${DEFAULT_BRANCH}" ]; then
+              echo "::error::No default branch to fall back to for a" \
+                "same-repository merge_group run; refusing to read the" \
+                "library from the commit under test."
+              exit 1
+            fi
+            ref="${DEFAULT_BRANCH}"
+            echo "::notice::Same-repository merge_group run: reading the" \
+              "library from ${DEFAULT_BRANCH} rather than from the queue's" \
+              "temporary commit."
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
       - name: Check out the shared library
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+          ref: ${{ steps.library_ref.outputs.ref }}
           path: .gh-actions-library
           persist-credentials: false
 

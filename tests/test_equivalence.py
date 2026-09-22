@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Ivan Pinatti
 """Prove the shared library normalizes every line exactly as the copy it replaces.
@@ -27,7 +26,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import pin_only  # noqa: E402
+import pin_only
 
 ORIGINALS = ROOT / "tests" / "originals"
 
@@ -88,7 +87,9 @@ def _load_original(repo: str):
     path = ORIGINALS / f"{repo}.py"
     if not path.is_file():
         pytest.skip(f"original for {repo} not fetched; run tools/fetch-originals.sh")
-    spec = importlib.util.spec_from_file_location(f"orig_{repo.replace('-', '_')}", path)
+    spec = importlib.util.spec_from_file_location(
+        f"orig_{repo.replace('-', '_')}", path
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -248,5 +249,6 @@ def test_verdict_matches_the_original(repo: str) -> None:
 
         mismatches.append(f"  {data!r}\n    original: {want!r}\n    shared:   {got!r}")
     assert not mismatches, (
-        f"{repo}: {len(mismatches)} input(s) decide differently:\n" + "\n".join(mismatches)
+        f"{repo}: {len(mismatches)} input(s) decide differently:\n"
+        + "\n".join(mismatches)
     )

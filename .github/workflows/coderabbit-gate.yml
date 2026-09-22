@@ -5,8 +5,16 @@ name: CodeRabbit Gate
 #
 # Called by relative path rather than by SHA, which is the one case where that
 # is correct: a repository calling its own reusable workflow gets the copy from
-# the commit under test, so a change to the gate is graded by the changed gate
-# rather than by the last released one. Consumers pin a SHA instead.
+# the commit that triggered the run, so a change to the gate is graded by the
+# changed gate rather than by the last released one. Consumers pin a SHA.
+#
+# Which commit that is depends on the trigger, and one of them matters. On
+# `pull_request_target` it is the base branch. Under `merge_group` it is the
+# queue's temporary commit, which contains the pull request's changes, so the
+# reusable workflow refuses to read its grading library from there and falls
+# back to the default branch; see the "Resolve the ref to read the library
+# from" step. Without that, code under test would be running in a job holding
+# `statuses: write`.
 
 on:
   # zizmor: ignore[dangerous-triggers]
