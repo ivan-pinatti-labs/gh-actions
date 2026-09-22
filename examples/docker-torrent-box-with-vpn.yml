@@ -12,9 +12,12 @@ rules:
   - path: .github/workflows/
     grammars:
       - digest_strip
-      - {name: action_sha_strip, when: outside_block_scalar}
-      - {name: bare_action_version_strip, when: outside_block_scalar}
-      - {name: action_ref_version, when: outside_block_scalar}
+      - name: action_sha_strip
+        when: outside_block_scalar
+      - name: bare_action_version_strip
+        when: outside_block_scalar
+      - name: action_ref_version
+        when: outside_block_scalar
       - version
 
 default_grammars:

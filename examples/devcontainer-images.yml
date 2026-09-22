@@ -15,6 +15,9 @@ rules:
 
 # Block scalars are passed through on every path here, not only workflows.
 default_grammars:
-  - {name: action_sha, when: outside_block_scalar}
-  - {name: bare_action_version, when: outside_block_scalar}
-  - {name: rev_pin, when: outside_block_scalar}
+  - name: action_sha
+    when: outside_block_scalar
+  - name: bare_action_version
+    when: outside_block_scalar
+  - name: rev_pin
+    when: outside_block_scalar

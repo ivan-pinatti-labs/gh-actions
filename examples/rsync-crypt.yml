@@ -18,8 +18,11 @@ rules:
     grammars: [image_digest]
   - path: .github/workflows/
     grammars:
-      - {name: action_sha, when: outside_block_scalar}
-      - {name: bare_action_version, when: outside_block_scalar}
-      - {name: rev_pin, when: outside_block_scalar}
+      - name: action_sha
+        when: outside_block_scalar
+      - name: bare_action_version
+        when: outside_block_scalar
+      - name: rev_pin
+        when: outside_block_scalar
 
 default_grammars: [action_sha, bare_action_version, rev_pin]

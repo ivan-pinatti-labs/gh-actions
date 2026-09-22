@@ -403,7 +403,6 @@ jobs:
           path: .gh-actions-library
           persist-credentials: false
 
-
       - name: Read the pull request's metadata
         id: pr
         env:
