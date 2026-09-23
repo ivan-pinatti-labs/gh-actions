@@ -434,6 +434,26 @@ jobs:
               ;;
           esac
 
+          # Shape first, then range. `context_wait_seconds` is a GitHub
+          # Actions `number`, which accepts 1500.5, and `[ 1500.5 -gt 1500 ]`
+          # is an integer expression error rather than a comparison. Inside
+          # `if` that error reads as false, so `set -e` never sees it, this
+          # job passes, and the owner lane fails later on the arithmetic
+          # instead. Checking the shape here is what keeps the failure at the
+          # call site where the value was chosen.
+          case "$WAIT" in
+            ''|*[!0-9]*)
+              echo "::error::context_wait_seconds must be a whole number of" \
+                "seconds: got '$WAIT'. GitHub's number type accepts a" \
+                "fraction, and the owner lane compares it as an integer."
+              exit 1
+              ;;
+          esac
+          if [ "$WAIT" -lt 1 ]; then
+            echo "::error::context_wait_seconds must be at least 1, got $WAIT."
+            exit 1
+          fi
+
           # The owner lane's timeout-minutes is fixed at 30 and no expression
           # can derive it from this input, so a larger wait would be cancelled
           # mid-loop and look exactly like the stranded pull request the input
