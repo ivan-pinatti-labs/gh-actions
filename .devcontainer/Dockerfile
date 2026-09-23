@@ -5,7 +5,7 @@
 # The base image is pinned by digest. BASE_IMAGE is a build argument only so a
 # change to the base image can be tested against this repository before it is
 # published.
-ARG BASE_IMAGE=ghcr.io/ivan-pinatti-labs/devcontainer-base@sha256:db75fbbf8972f6f1d7746c06238fbf15a387e224947e0e0dd5bf4d5fe3844d0b
+ARG BASE_IMAGE=ghcr.io/ivan-pinatti-labs/devcontainer-base@sha256:3593f7cdc52abe2e6a34c32145a920c2cad3b72efc24aaa0130f4464822bf17c
 FROM ${BASE_IMAGE}
 
 USER 0:0
