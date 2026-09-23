@@ -1056,3 +1056,54 @@ def test_names_the_unproven_base_when_refusing(tmp_path):
     )
     assert result.returncode == 1
     assert "could not be proven" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Depinning: a SHA pin may gain a version, never lose one
+# ---------------------------------------------------------------------------
+
+
+def test_refuses_moving_an_action_off_its_sha_onto_a_tag(tmp_path):
+    # Found by CodeRabbit on ivan-pinatti-labs/.github#22, and real: the two
+    # sides normalize to the same placeholder, because `bare_action_version`
+    # synthesizes the release comment that `action_sha` produces. That is what
+    # makes a first-time pin grade as a pin bump, and it made this, the same
+    # edit backwards, grade as one too. Every copy of the original script had
+    # the same hole.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n        uses: actions/checkout@{SHA} # v7\n",
+        "      - name: Checkout\n        uses: actions/checkout@v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "moved off its commit SHA" in result.stdout
+
+
+def test_refuses_depinning_even_when_the_release_comment_moves_too(tmp_path):
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n        uses: actions/checkout@{SHA} # v7\n",
+        "      - name: Checkout\n        uses: actions/checkout@v8 # v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "moved off its commit SHA" in result.stdout
+
+
+def test_still_accepts_a_first_time_pin_after_the_depin_check(tmp_path):
+    # The direction that has to keep working: Renovate's pinDigests adds the
+    # SHA, so the action gains a pin rather than losing one.
+    result = _check_in_repo(
+        tmp_path,
+        "      - name: Checkout\n        uses: actions/checkout@v7\n",
+        f"      - name: Checkout\n        uses: actions/checkout@{SHA} # v7\n",
+    )
+    assert result.returncode == 0, result.stdout
+
+
+def test_still_accepts_an_ordinary_sha_bump_after_the_depin_check(tmp_path):
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n        uses: actions/checkout@{SHA} # v7\n",
+        f"      - name: Checkout\n        uses: actions/checkout@{OTHER_SHA} # v8\n",
+    )
+    assert result.returncode == 0, result.stdout

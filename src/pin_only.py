@@ -222,6 +222,59 @@ def _normalize_bare_action_version(match: re.Match[str]) -> str:
     return f"{match.group('action_prefix')}@<version> # <version>"
 
 
+# A `uses:` reference and the ref it points at, either side of the `@`. Used
+# only by the depin check below, which needs the raw ref rather than the
+# normalized placeholder the grammars produce.
+ACTION_REF = re.compile(r"uses:[ \t]*(?P<action>[\w.-]+/[\w./-]+)@(?P<ref>[^\s'\"#]+)")
+SHA_REF = re.compile(r"^[0-9a-fA-F]{40}$")
+
+
+def _depinned_actions(diff: str) -> list[str]:
+    """Actions a diff moves off a commit SHA and onto a mutable ref.
+
+    `bare_action_version` normalizes a bare `@v8` to the same placeholder
+    `action_sha` produces for `@<sha> # v8`, and that is deliberate: it is
+    what lets Renovate's first-time pin, `@v7` becoming `@<sha> # v7`, grade
+    as a pin bump rather than as a structural change.
+
+    Normalization is symmetric, so on its own it accepts that same edit
+    backwards. `@<sha> # v7` becoming `@v8` normalizes to the identical
+    placeholder on both sides and reads as pin-only, while actually replacing
+    an immutable pin with a tag the upstream owner can move at will. The
+    line-by-line comparison cannot see direction, because by then both sides
+    are placeholders, so direction is checked here on the raw diff instead.
+
+    Reported per action rather than per line: the question is whether a given
+    action lost its SHA, not how many lines mention it.
+    """
+    was_pinned: dict[str, set[str]] = {}
+    now_loose: dict[str, set[str]] = {}
+    path = ""
+    for line in diff.splitlines():
+        if line.startswith("diff --git "):
+            path = line.split(" b/", 1)[-1] if " b/" in line else ""
+            continue
+        if not line or line[0] not in "+-" or line.startswith(("---", "+++")):
+            continue
+        match = ACTION_REF.search(line[1:])
+        if not match:
+            continue
+        pinned = bool(SHA_REF.match(match.group("ref")))
+        if line[0] == "-" and pinned:
+            was_pinned.setdefault(path, set()).add(match.group("action"))
+        elif line[0] == "+" and not pinned:
+            now_loose.setdefault(path, set()).add(match.group("action"))
+
+    problems = []
+    for path in sorted(was_pinned):
+        for action in sorted(was_pinned[path] & now_loose.get(path, set())):
+            problems.append(
+                f"{path}: {action} moved off its commit SHA and onto a "
+                f"mutable ref, which is a depin, not a pin bump"
+            )
+    return problems
+
+
 def _annotated_arg_names(path: Path, annotation: re.Pattern[str]) -> frozenset[str]:
     """Read the ARG names an annotation comment makes eligible in one file.
 
@@ -940,6 +993,8 @@ def main(argv: list[str] | None = None) -> int:
             problems.append(
                 f"{path}: no readable changed lines, so nothing was checked"
             )
+
+    problems.extend(_depinned_actions(diff))
 
     for path, (removed, added) in changes.items():
         # Counter subtraction drops non-positive counts, so each direction has
