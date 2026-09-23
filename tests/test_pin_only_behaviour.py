@@ -1147,3 +1147,23 @@ def test_still_refuses_when_one_of_two_occurrences_is_depinned(tmp_path):
     )
     assert result.returncode == 1, result.stdout
     assert "which is a depin" in result.stdout
+
+
+def test_refuses_a_pin_swapped_between_two_occurrences(tmp_path):
+    # CodeRabbit's second follow-up on gh-actions#7. Counting pinned
+    # occurrences was not enough: this swap leaves the totals equal at one
+    # each, and the normalized line multiset matches too, while the first step
+    # still ends up mutable. Only a per-position comparison catches it.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: First\n"
+        f"        uses: actions/checkout@{SHA} # v7\n"
+        f"      - name: Second\n"
+        f"        uses: actions/checkout@v7\n",
+        f"      - name: First\n"
+        f"        uses: actions/checkout@v8\n"
+        f"      - name: Second\n"
+        f"        uses: actions/checkout@{OTHER_SHA} # v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "which is a depin" in result.stdout

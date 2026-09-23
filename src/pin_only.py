@@ -229,61 +229,73 @@ ACTION_REF = re.compile(r"uses:[ \t]*(?P<action>[\w.-]+/[\w./-]+)@(?P<ref>[^\s'\
 SHA_REF = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
-def _depinned_actions(diff: str) -> list[str]:
-    """Actions a diff moves off a commit SHA and onto a mutable ref.
+def _action_refs(lines: list[str]) -> list[tuple[str, bool]]:
+    """Every `uses:` reference in file order, with whether it is SHA pinned."""
+    refs = []
+    for line in lines:
+        match = ACTION_REF.search(line)
+        if match:
+            refs.append(
+                (match.group("action"), bool(SHA_REF.match(match.group("ref"))))
+            )
+    return refs
+
+
+def _depinned_actions(diff_lines: list[str]) -> list[str]:
+    """Steps a diff moves off a commit SHA and onto a mutable ref.
 
     `bare_action_version` normalizes a bare `@v8` to the same placeholder
     `action_sha` produces for `@<sha> # v8`, and that is deliberate: it is
     what lets Renovate's first-time pin, `@v7` becoming `@<sha> # v7`, grade
     as a pin bump rather than as a structural change.
 
-    Normalization is symmetric, so on its own it accepts that same edit
-    backwards. `@<sha> # v7` becoming `@v8` normalizes to the identical
-    placeholder on both sides and reads as pin-only, while actually replacing
-    an immutable pin with a tag the upstream owner can move at will. The
-    line-by-line comparison cannot see direction, because by then both sides
-    are placeholders, so direction is checked here on the raw diff instead.
+    Normalization is symmetric, so on its own it accepts that edit backwards.
+    `@<sha> # v7` becoming `@v8` normalizes to the identical placeholder on
+    both sides and reads as pin-only, while replacing an immutable pin with a
+    tag the upstream owner can move at will.
 
-    Counted per action rather than matched as a set. One file may use the same
-    action twice, and a diff that bumps one occurrence SHA to SHA while
-    bumping an unpinned second occurrence `v7` to `v8` would put that action
-    on both sides of a set intersection although nothing was depinned. What
-    actually matters is whether the action ends the diff with fewer pinned
-    occurrences than it started with, so that is what is compared.
+    Compared by position rather than by name or by count. Counting was the
+    second attempt and is not enough either: a file using one action twice can
+    swap which occurrence carries the SHA, leaving the totals equal and the
+    normalized line sets matching while one particular step still goes
+    mutable. What has to hold is per step, so each `uses:` reference is paired
+    with the one at the same position on the other side.
 
-    Unchanged occurrences appear on neither side and so cannot affect the
-    counts.
+    Only files whose base is proven readable are examined. For
+    `.github/workflows/` that is not a gap: a file whose base cannot be proven
+    already has every pin in it refused, so there is nothing left for this to
+    let through.
     """
-    pinned_before: dict[tuple[str, str], int] = {}
-    pinned_after: dict[tuple[str, str], int] = {}
-    touched: set[tuple[str, str]] = set()
-    path = ""
-    for line in diff.splitlines():
-        if line.startswith("diff --git "):
-            path = line.split(" b/", 1)[-1] if " b/" in line else ""
-            continue
-        if not line or line[0] not in "+-" or line.startswith(("---", "+++")):
-            continue
-        match = ACTION_REF.search(line[1:])
-        if not match:
-            continue
-        key = (path, match.group("action"))
-        touched.add(key)
-        if not SHA_REF.match(match.group("ref")):
-            continue
-        counts = pinned_before if line[0] == "-" else pinned_after
-        counts[key] = counts.get(key, 0) + 1
-
     problems = []
-    for path, action in sorted(touched):
-        before = pinned_before.get((path, action), 0)
-        after = pinned_after.get((path, action), 0)
-        if after < before:
-            problems.append(
-                f"{path}: {action} ends this diff with {after} commit SHA "
-                f"pin(s) where it had {before}, which is a depin, not a pin bump"
-            )
+    for path, (base, head) in sorted(_reconstructed_files(diff_lines).items()):
+        before = _action_refs(base)
+        after = _action_refs(head)
+        if len(before) != len(after):
+            # A step was added or removed. That is a structural change the
+            # line comparison refuses on its own; saying so twice would only
+            # be noise.
+            continue
+        for index, ((was_action, was_pinned), (now_action, now_pinned)) in enumerate(
+            zip(before, after), start=1
+        ):
+            if was_pinned and not now_pinned:
+                where = (
+                    f"{was_action} -> {now_action}"
+                    if was_action != now_action
+                    else was_action
+                )
+                problems.append(
+                    f"{path}: the {_ordinal(index)} `uses:` in the file "
+                    f"({where}) moves off its commit SHA and onto a mutable "
+                    f"ref, which is a depin, not a pin bump"
+                )
     return problems
+
+
+def _ordinal(n: int) -> str:
+    if 10 <= n % 100 <= 20:
+        return f"{n}th"
+    return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }".replace(" ", "")
 
 
 def _annotated_arg_names(path: Path, annotation: re.Pattern[str]) -> frozenset[str]:
@@ -772,6 +784,23 @@ def _whole_file_block_scalars(
     is refused (see `parse`). Only `.github/workflows/` is read, the one
     place `normalize` consults the answer.
     """
+    return {
+        path: (_block_scalar_lines(base), _block_scalar_lines(head))
+        for path, (base, head) in _reconstructed_files(diff_lines).items()
+        if path.startswith(".github/workflows/")
+    }
+
+
+def _reconstructed_files(
+    diff_lines: list[str],
+) -> dict[str, tuple[list[str], list[str]]]:
+    """Both sides of every file whose base can be read and proven whole.
+
+    A file is present only when its `index` line's blob id matches the copy in
+    the checkout and its hunks apply cleanly, which is what says the diff and
+    the base describe the same file. Everything else is absent, and each
+    caller decides what an absent file means for it.
+    """
     files: dict[str, tuple[str | None, list[tuple[re.Match[str], list[str]]]]] = {}
     path = None
     for line in diff_lines:
@@ -795,11 +824,9 @@ def _whole_file_block_scalars(
             if index:
                 files[path] = (index.group("old"), hunks)
 
-    marks: dict[str, tuple[list[bool], list[bool]]] = {}
+    sides: dict[str, tuple[list[str], list[str]]] = {}
     for path, (blob, hunks) in files.items():
-        if not path.startswith(".github/workflows/") or not blob or not hunks:
-            continue
-        if not blob.strip("0"):
+        if not blob or not hunks or not blob.strip("0"):
             continue
         base = _base_lines(path, blob)
         if base is None:
@@ -807,8 +834,8 @@ def _whole_file_block_scalars(
         head = _apply_hunks(base, hunks)
         if head is None:
             continue
-        marks[path] = (_block_scalar_lines(base), _block_scalar_lines(head))
-    return marks
+        sides[path] = (base, head)
+    return sides
 
 
 def normalize(
@@ -1005,7 +1032,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"{path}: no readable changed lines, so nothing was checked"
             )
 
-    problems.extend(_depinned_actions(diff))
+    problems.extend(_depinned_actions(diff.splitlines()))
 
     for path, (removed, added) in changes.items():
         # Counter subtraction drops non-positive counts, so each direction has
