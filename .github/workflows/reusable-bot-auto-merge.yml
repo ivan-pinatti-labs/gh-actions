@@ -116,7 +116,10 @@ name: Bot Auto Merge
           hardcoded 120 seconds is why docker-torrent-box-with-vpn #145
           happens: its integration suite outlasts the window, so the job gives
           up and the pull request sits green but unapproved. A repository with
-          a long suite sets this higher.
+          a long suite sets this higher. Capped at 1500, because the job's own
+          timeout-minutes is fixed at 30 and GitHub expressions cannot compute
+          one from the other; a larger value would be cancelled mid-wait and
+          look exactly like the bug this input exists to fix.
         required: false
         type: number
         default: 120
@@ -126,6 +129,7 @@ permissions:
 jobs:
   approve-bot:
     name: Approve and enable auto-merge for a dependency bot
+    needs: validate
     # user.login is set by GitHub from the authenticated author, so a pull
     # request cannot claim to be a bot. Exact equality, not startsWith or
     # contains: `renovate[bot]-x` is a login somebody may register, and the
@@ -137,6 +141,15 @@ jobs:
     # docker-torrent-box-with-vpn's #61 collected seven identical approvals
     # before anything had even run. Only the label this job actually reads is
     # worth waking it for.
+    # `bots` is compared raw, so it takes a comma separated list with no
+    # spaces and no newlines. reusable-coderabbit-gate.yml trims both, which
+    # means a caller passing "renovate[bot], dependabot[bot]" to each workflow
+    # would have the gate treat Dependabot as a bot while this job never
+    # matched it, and nothing would report the disagreement. GitHub expressions
+    # have no `replace` or `split`, so this cannot normalize in the condition
+    # itself; the `validate` job below refuses the mismatch loudly instead,
+    # which is the behaviour that can actually be relied on.
+    #
     # The bot list is matched exactly, not by substring: `contains(inputs.bots,
     # login)` would let a login that is a prefix of a configured one through,
     # and this condition is the boundary that decides whose pull requests this
@@ -392,8 +405,49 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: gh pr merge --auto --squash "$PR_URL"
 
+  validate:
+    name: Check the caller's inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Refuse an input this workflow cannot honour
+        env:
+          BOTS: ${{ inputs.bots }}
+          WAIT: ${{ inputs.context_wait_seconds }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `bots` is compared raw in approve-bot's `if:`, and GitHub
+          # expressions have no `replace` or `split` to normalize it there.
+          # reusable-coderabbit-gate.yml does trim, so the same caller string
+          # can mean two different things to the two workflows. Refusing the
+          # ambiguous spelling is what keeps them in agreement, rather than
+          # each quietly having its own idea of the list.
+          case "$BOTS" in
+            *[[:space:]]*)
+              echo "::error::bots must be comma separated with no spaces or" \
+                "newlines: got '$BOTS'. reusable-coderabbit-gate.yml would" \
+                "trim those and this workflow would not, so the two would" \
+                "disagree about which authors are bots."
+              exit 1
+              ;;
+          esac
+
+          # The owner lane's timeout-minutes is fixed at 30 and no expression
+          # can derive it from this input, so a larger wait would be cancelled
+          # mid-loop and look exactly like the stranded pull request the input
+          # exists to prevent.
+          if [ "$WAIT" -gt 1500 ]; then
+            echo "::error::context_wait_seconds is $WAIT, above the 1500" \
+              "this workflow can honour: approve-owner is capped at 30" \
+              "minutes and would be cancelled before the wait finished."
+            exit 1
+          fi
+
   resolve-owner:
     name: Find the owner's pull request to approve
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
@@ -412,7 +466,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # Falls back to the dispatch input, which is the only place a pull
+          # request number exists on a manual run: `github.event.pull_request`
+          # is empty there.
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
           # A repository variable, not a hardcoded literal: this repository
@@ -473,6 +530,25 @@ jobs:
                           | {pr_number: .number}]')
               ;;
 
+            workflow_dispatch)
+              # The manual recovery path, and the reason it cannot just fall
+              # through to the `workflow_run` branch above: a dispatch may
+              # name one pull request through `pr_number`, which is the whole
+              # point of having the input. Blank means every open owner
+              # authored pull request, the same set that branch computes.
+              if [ -n "$PR_NUMBER" ]; then
+                matrix=$(jq -nc --arg n "$PR_NUMBER" '[{pr_number: ($n | tonumber)}]')
+              else
+                # shellcheck disable=SC2016
+                matrix=$(gh pr list --repo "$REPO" --state open --limit 100 \
+                  --json number,author,isCrossRepository \
+                  | jq -c --arg owner "$OWNER_LOGIN" \
+                    '[.[] | select(.author.login == $owner
+                                    and .isCrossRepository == false)
+                            | {pr_number: .number}]')
+              fi
+              ;;
+
             *)
               echo "::error::Unhandled event: $EVENT_NAME"
               exit 1
@@ -490,7 +566,10 @@ jobs:
     # reports as success on its own with no step of this job ever running.
     if: needs.resolve-owner.outputs.matrix != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 30, not 5: context_wait_seconds is allowed up to 1500 seconds and a
+    # fixed 5 would cancel the wait at 300, which is the same stranded
+    # pull request the input exists to prevent.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

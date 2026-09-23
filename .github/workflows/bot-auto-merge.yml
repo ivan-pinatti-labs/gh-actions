@@ -35,8 +35,13 @@ permissions:
 jobs:
   bot-auto-merge:
     uses: ./.github/workflows/reusable-bot-auto-merge.yml
+    # `contents: write` because the called `approve-bot` job asks for it, to
+    # arm `gh pr merge --auto`. A called workflow may lower the permissions it
+    # is handed but never raise them, so granting less here does not degrade
+    # gracefully: GitHub refuses the whole run before any job starts, and both
+    # lanes stop. The inline job this replaced had it for the same reason.
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       checks: read
       statuses: read
