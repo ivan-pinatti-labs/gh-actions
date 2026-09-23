@@ -1133,4 +1133,4 @@ def test_refuses_moving_an_action_off_its_sha_onto_a_tag(tmp_path):
         "      - name: Checkout\n        uses: actions/checkout@v8\n",
     )
     assert result.returncode == 1, result.stdout
-    assert "moved off its commit SHA" in result.stdout
+    assert "which is a depin" in result.stdout

@@ -1076,7 +1076,7 @@ def test_refuses_moving_an_action_off_its_sha_onto_a_tag(tmp_path):
         "      - name: Checkout\n        uses: actions/checkout@v8\n",
     )
     assert result.returncode == 1, result.stdout
-    assert "moved off its commit SHA" in result.stdout
+    assert "which is a depin" in result.stdout
 
 
 def test_refuses_depinning_even_when_the_release_comment_moves_too(tmp_path):
@@ -1086,7 +1086,7 @@ def test_refuses_depinning_even_when_the_release_comment_moves_too(tmp_path):
         "      - name: Checkout\n        uses: actions/checkout@v8 # v8\n",
     )
     assert result.returncode == 1, result.stdout
-    assert "moved off its commit SHA" in result.stdout
+    assert "which is a depin" in result.stdout
 
 
 def test_still_accepts_a_first_time_pin_after_the_depin_check(tmp_path):
@@ -1107,3 +1107,43 @@ def test_still_accepts_an_ordinary_sha_bump_after_the_depin_check(tmp_path):
         f"      - name: Checkout\n        uses: actions/checkout@{OTHER_SHA} # v8\n",
     )
     assert result.returncode == 0, result.stdout
+
+
+def test_accepts_two_uses_of_one_action_bumped_different_ways(tmp_path):
+    # CodeRabbit's follow-up on gh-actions#7, and a real false positive in the
+    # first version of the depin check: one file using the same action twice,
+    # with the pinned occurrence bumped SHA to SHA and the unpinned one bumped
+    # v7 to v8, put that action on both sides of a set intersection although
+    # nothing was depinned. Counting pinned occurrences rather than matching
+    # names is what tells the two apart: checkout ends with one SHA pin, the
+    # same as it started with.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n"
+        f"        uses: actions/checkout@{SHA} # v7\n"
+        f"      - name: Checkout again\n"
+        f"        uses: actions/checkout@v7\n",
+        f"      - name: Checkout\n"
+        f"        uses: actions/checkout@{OTHER_SHA} # v8\n"
+        f"      - name: Checkout again\n"
+        f"        uses: actions/checkout@v8\n",
+    )
+    assert result.returncode == 0, result.stdout
+
+
+def test_still_refuses_when_one_of_two_occurrences_is_depinned(tmp_path):
+    # The other half of the same shape: two pinned occurrences, one of which
+    # loses its SHA. The count drops, so it is still caught.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n"
+        f"        uses: actions/checkout@{SHA} # v7\n"
+        f"      - name: Checkout again\n"
+        f"        uses: actions/checkout@{SHA} # v7\n",
+        f"      - name: Checkout\n"
+        f"        uses: actions/checkout@{OTHER_SHA} # v8\n"
+        f"      - name: Checkout again\n"
+        f"        uses: actions/checkout@v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "which is a depin" in result.stdout

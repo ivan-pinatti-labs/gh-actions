@@ -244,11 +244,19 @@ def _depinned_actions(diff: str) -> list[str]:
     line-by-line comparison cannot see direction, because by then both sides
     are placeholders, so direction is checked here on the raw diff instead.
 
-    Reported per action rather than per line: the question is whether a given
-    action lost its SHA, not how many lines mention it.
+    Counted per action rather than matched as a set. One file may use the same
+    action twice, and a diff that bumps one occurrence SHA to SHA while
+    bumping an unpinned second occurrence `v7` to `v8` would put that action
+    on both sides of a set intersection although nothing was depinned. What
+    actually matters is whether the action ends the diff with fewer pinned
+    occurrences than it started with, so that is what is compared.
+
+    Unchanged occurrences appear on neither side and so cannot affect the
+    counts.
     """
-    was_pinned: dict[str, set[str]] = {}
-    now_loose: dict[str, set[str]] = {}
+    pinned_before: dict[tuple[str, str], int] = {}
+    pinned_after: dict[tuple[str, str], int] = {}
+    touched: set[tuple[str, str]] = set()
     path = ""
     for line in diff.splitlines():
         if line.startswith("diff --git "):
@@ -259,18 +267,21 @@ def _depinned_actions(diff: str) -> list[str]:
         match = ACTION_REF.search(line[1:])
         if not match:
             continue
-        pinned = bool(SHA_REF.match(match.group("ref")))
-        if line[0] == "-" and pinned:
-            was_pinned.setdefault(path, set()).add(match.group("action"))
-        elif line[0] == "+" and not pinned:
-            now_loose.setdefault(path, set()).add(match.group("action"))
+        key = (path, match.group("action"))
+        touched.add(key)
+        if not SHA_REF.match(match.group("ref")):
+            continue
+        counts = pinned_before if line[0] == "-" else pinned_after
+        counts[key] = counts.get(key, 0) + 1
 
     problems = []
-    for path in sorted(was_pinned):
-        for action in sorted(was_pinned[path] & now_loose.get(path, set())):
+    for path, action in sorted(touched):
+        before = pinned_before.get((path, action), 0)
+        after = pinned_after.get((path, action), 0)
+        if after < before:
             problems.append(
-                f"{path}: {action} moved off its commit SHA and onto a "
-                f"mutable ref, which is a depin, not a pin bump"
+                f"{path}: {action} ends this diff with {after} commit SHA "
+                f"pin(s) where it had {before}, which is a depin, not a pin bump"
             )
     return problems
 
