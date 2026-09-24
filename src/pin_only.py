@@ -307,7 +307,7 @@ def _depinned_actions(diff_lines: list[str]) -> list[str]:
             # be noise.
             continue
         for index, ((was_action, was_pinned), (now_action, now_pinned)) in enumerate(
-            zip(before, after), start=1
+            zip(before, after, strict=True), start=1
         ):
             where = f"the {_ordinal(index)} `uses:` in the file"
             if was_action != now_action:
