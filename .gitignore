@@ -30,3 +30,8 @@ CLAUDE.local.md
 .claude/agents/local/
 .claude/worktrees/
 tests/originals/
+
+# Coverage data. `parallel = true` in .coveragerc means each spawned
+# interpreter writes its own file before they are combined.
+.coverage
+.coverage.*

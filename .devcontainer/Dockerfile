@@ -19,10 +19,11 @@ USER 0:0
 # other repositories it carries keys for (NodeSource and HashiCorp), and the
 # reasoning behind all of this.
 #
-# python3-pytest and python3-yaml are what this repository's own suite needs:
-# pytest to run the equivalence tests, and PyYAML because the pin-only library
-# reads its configuration from YAML. Both come from Ubuntu rather than pip,
-# for the same provenance reason the rest of this organization does.
+# python3-pytest, python3-pytest-cov and python3-yaml are what this
+# repository's own suite needs: pytest to run the tests, pytest-cov to measure
+# what they reach, and PyYAML because the pin-only library reads its
+# configuration from YAML. All from Ubuntu rather than pip, for the same
+# provenance reason the rest of this organization does.
 #
 # A project created from this template adds what it needs here. Prefer a
 # distribution package, then a vendor's own signed apt repository, then the
@@ -46,6 +47,7 @@ RUN printf '%s\n' \
     gh \
     pre-commit \
     python3-pytest \
+    python3-pytest-cov \
     python3-yaml \
   && rm -rf /var/lib/apt/lists/*
 

@@ -38,7 +38,7 @@ OUTSIDE_THE_ALLOWLIST = (FIXTURES / "outside-allowlist.diff").read_text()
 def _run(config: str, diff: str) -> subprocess.CompletedProcess:
     # S603: the command is this interpreter and paths from this repository,
     # with the diff arriving on stdin. Nothing here comes from a caller.
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         [
             sys.executable,
             str(ROOT / "src" / "pin_only.py"),

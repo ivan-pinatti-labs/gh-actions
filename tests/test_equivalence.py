@@ -26,7 +26,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import pin_only
+# E402: the import has to follow the sys.path line above, because that is what
+# puts src/ on the path. Moving it to the top would import a module that is not
+# findable yet.
+import pin_only  # noqa: E402
 
 ORIGINALS = ROOT / "tests" / "originals"
 
@@ -166,7 +169,7 @@ def test_allowed_paths_match_the_original(repo: str) -> None:
 
 # --- review-verdict -------------------------------------------------------
 
-VERDICT_REPOS = REPOS + [".github"]
+VERDICT_REPOS = [*REPOS, ".github"]
 
 # Every branch decide() has, plus the shapes that must not be trusted: a
 # non-string description, a fork claiming to be a bot, a bot whose pin-only
