@@ -254,20 +254,51 @@ def _depinned_actions(diff_lines: list[str]) -> list[str]:
     both sides and reads as pin-only, while replacing an immutable pin with a
     tag the upstream owner can move at will.
 
-    Compared by position rather than by name or by count. Counting was the
-    second attempt and is not enough either: a file using one action twice can
-    swap which occurrence carries the SHA, leaving the totals equal and the
-    normalized line sets matching while one particular step still goes
-    mutable. What has to hold is per step, so each `uses:` reference is paired
-    with the one at the same position on the other side.
+    Compared by position, and by name as well as pin state. Three earlier
+    attempts were each too weak, which is worth recording because each looked
+    sufficient:
 
-    Only files whose base is proven readable are examined. For
-    `.github/workflows/` that is not a gap: a file whose base cannot be proven
-    already has every pin in it refused, so there is nothing left for this to
-    let through.
+    * intersecting action names refused a legitimate diff that bumped one
+      occurrence SHA to SHA and another tag to tag;
+    * counting pinned occurrences per action allowed a swap between two
+      occurrences of the same action, totals unchanged;
+    * comparing pin state per position allowed a swap between two *different*
+      actions, the pin-state vector unchanged while one of them still lost its
+      SHA.
+
+    So a position whose action changed at all is refused outright: that is a
+    structural edit, not a pin bump, whatever happened to the pins.
+
+    A file whose base cannot be reconstructed gets every changed `uses:` line
+    refused instead. `parse` already refuses unreconstructed files under
+    `.github/workflows/`, but an allowed path outside it grades with the same
+    action grammars and would otherwise skip this check entirely.
     """
     problems = []
-    for path, (base, head) in sorted(_reconstructed_files(diff_lines).items()):
+    reconstructed = _reconstructed_files(diff_lines)
+
+    # Changed `uses:` lines per file, for the files reconstruction could not
+    # reach. Read from the raw diff, since there is no proven base to compare.
+    unproven: dict[str, int] = {}
+    path = ""
+    for line in diff_lines:
+        if line.startswith("diff --git "):
+            path = line.split(" b/", 1)[-1] if " b/" in line else ""
+            continue
+        if not line or line[0] not in "+-" or line.startswith(("---", "+++")):
+            continue
+        if path in reconstructed:
+            continue
+        if ACTION_REF.search(line[1:]):
+            unproven[path] = unproven.get(path, 0) + 1
+
+    for path in sorted(unproven):
+        problems.append(
+            f"{path}: a `uses:` pin changed in a file whose base could not be "
+            f"proven, so whether it kept its commit SHA cannot be checked"
+        )
+
+    for path, (base, head) in sorted(reconstructed.items()):
         before = _action_refs(base)
         after = _action_refs(head)
         if len(before) != len(after):
@@ -278,16 +309,16 @@ def _depinned_actions(diff_lines: list[str]) -> list[str]:
         for index, ((was_action, was_pinned), (now_action, now_pinned)) in enumerate(
             zip(before, after), start=1
         ):
-            if was_pinned and not now_pinned:
-                where = (
-                    f"{was_action} -> {now_action}"
-                    if was_action != now_action
-                    else was_action
-                )
+            where = f"the {_ordinal(index)} `uses:` in the file"
+            if was_action != now_action:
                 problems.append(
-                    f"{path}: the {_ordinal(index)} `uses:` in the file "
-                    f"({where}) moves off its commit SHA and onto a mutable "
-                    f"ref, which is a depin, not a pin bump"
+                    f"{path}: {where} changed action, {was_action} to "
+                    f"{now_action}, which is a structural change, not a pin bump"
+                )
+            elif was_pinned and not now_pinned:
+                problems.append(
+                    f"{path}: {where} ({was_action}) moves off its commit SHA "
+                    f"and onto a mutable ref, which is a depin, not a pin bump"
                 )
     return problems
 

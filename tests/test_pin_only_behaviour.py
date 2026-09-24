@@ -1167,3 +1167,38 @@ def test_refuses_a_pin_swapped_between_two_occurrences(tmp_path):
     )
     assert result.returncode == 1, result.stdout
     assert "which is a depin" in result.stdout
+
+
+def test_refuses_a_swap_between_two_different_actions(tmp_path):
+    # CodeRabbit's third follow-up on gh-actions#7. Comparing pin state per
+    # position was still not enough: swapping which of two different actions
+    # carries the SHA leaves the pin-state vector identical, pinned then
+    # loose, while actions/checkout still ends up on a mutable ref.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: First\n"
+        f"        uses: actions/checkout@{SHA} # v7\n"
+        f"      - name: Second\n"
+        f"        uses: actions/setup-python@v5\n",
+        f"      - name: First\n"
+        f"        uses: actions/setup-python@{OTHER_SHA} # v5\n"
+        f"      - name: Second\n"
+        f"        uses: actions/checkout@v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "changed action" in result.stdout
+
+
+def test_refuses_a_uses_pin_in_a_file_whose_base_is_unproven(tmp_path):
+    # An allowed path outside .github/workflows/ grades with the same action
+    # grammars but is not refused by parse for being unreconstructed, so
+    # without this it skipped the depin check entirely.
+    diff = _diff(
+        ".pre-commit-config.yaml",
+        f"       hooks:\n"
+        f"-        uses: actions/checkout@{SHA} # v7\n"
+        f"+        uses: actions/checkout@v8\n",
+    )
+    result = _check(diff)
+    assert result.returncode == 1, result.stdout
+    assert "could not be proven" in result.stdout
