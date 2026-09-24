@@ -22,7 +22,7 @@ SCRIPT = ROOT / "src" / "review_verdict.py"
 
 
 def _run(data: dict) -> subprocess.CompletedProcess:
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         [sys.executable, str(SCRIPT)],
         input=json.dumps(data),
         capture_output=True,
@@ -314,7 +314,7 @@ def test_a_fork_pull_request_is_graded_like_a_human():
 
 
 def test_refuses_malformed_json():
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [sys.executable, str(SCRIPT)],
         input="not json",
         capture_output=True,
@@ -327,7 +327,7 @@ def test_refuses_malformed_json():
 
 
 def test_refuses_a_json_value_that_is_not_an_object():
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [sys.executable, str(SCRIPT)],
         input="[1, 2, 3]",
         capture_output=True,

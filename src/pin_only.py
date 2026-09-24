@@ -382,7 +382,7 @@ def _strip_bare_action_version(match: re.Match[str]) -> str:
     return f"{match.group('action_prefix')} # <version>"
 
 
-def _eligible_arg_names(cfg: "Config") -> frozenset[str]:
+def _eligible_arg_names(cfg: Config) -> frozenset[str]:
     """Every ARG name an annotation makes pin eligible, across all sources."""
     eligible: set[str] = set()
     for source in cfg.arg_sources:
@@ -393,7 +393,7 @@ def _eligible_arg_names(cfg: "Config") -> frozenset[str]:
     return frozenset(eligible)
 
 
-def _normalize_annotated_arg(line: str, cfg: "Config") -> str:
+def _normalize_annotated_arg(line: str, cfg: Config) -> str:
     """Normalize an ARG whose name an annotation made eligible, and nothing else."""
     arg = ARG_LINE.match(line)
     if not arg:

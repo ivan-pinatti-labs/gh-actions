@@ -37,7 +37,7 @@ OTHER_SHA = "b" * 40
 
 
 def _check(diff: str) -> subprocess.CompletedProcess:
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         [
             sys.executable,
             str(SCRIPT),
@@ -692,8 +692,8 @@ def _git(repo, *args: str) -> str:
     # against a throwaway repository pytest created. Nothing here comes from
     # outside the test, and pinning an absolute git path would make the suite
     # depend on where the container installed it.
-    return subprocess.run(  # noqa: S603
-        [  # noqa: S607
+    return subprocess.run(
+        [
             "git",
             "-C",
             str(repo),
@@ -727,7 +727,7 @@ def _check_in_repo(tmp_path, before: str, after: str, *, base: str | None = None
     workflow.write_text(after)
     diff = _git(tmp_path, "diff")
     workflow.write_text(before if base is None else base)
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         [
             sys.executable,
             str(SCRIPT),
@@ -794,7 +794,7 @@ def test_falls_back_when_the_hunks_disagree_with_the_base(tmp_path):
     workflow.write_text(after)
     diff = _git(tmp_path, "diff").replace("shallower than it.", "else at all.")
     workflow.write_text(before)
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [
             sys.executable,
             str(SCRIPT),
@@ -824,7 +824,7 @@ def test_falls_back_when_a_hunk_is_shorter_than_its_header(tmp_path):
     lines = _git(tmp_path, "diff").splitlines()
     diff = "\n".join(lines[:-1]) + "\n"
     workflow.write_text(before)
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [
             sys.executable,
             str(SCRIPT),

@@ -302,7 +302,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install Python-based tooling
-        run: pip install pytest pyyaml
+        run: pip install pytest pytest-cov pyyaml
 
       - name: Fetch the originals this suite compares against
         env:
