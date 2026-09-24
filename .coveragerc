@@ -1,0 +1,7 @@
+# Read by both the in-process run and, through COVERAGE_PROCESS_START, by
+# every subprocess the suite spawns.
+[run]
+source = src
+# The suite runs the library as a command many times over, so each of those
+# interpreters writes its own data file and they are combined at the end.
+parallel = true
