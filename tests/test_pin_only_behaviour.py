@@ -1056,3 +1056,149 @@ def test_names_the_unproven_base_when_refusing(tmp_path):
     )
     assert result.returncode == 1
     assert "could not be proven" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Depinning: a SHA pin may gain a version, never lose one
+# ---------------------------------------------------------------------------
+
+
+def test_refuses_moving_an_action_off_its_sha_onto_a_tag(tmp_path):
+    # Found by CodeRabbit on ivan-pinatti-labs/.github#22, and real: the two
+    # sides normalize to the same placeholder, because `bare_action_version`
+    # synthesizes the release comment that `action_sha` produces. That is what
+    # makes a first-time pin grade as a pin bump, and it made this, the same
+    # edit backwards, grade as one too. Every copy of the original script had
+    # the same hole.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n        uses: actions/checkout@{SHA} # v7\n",
+        "      - name: Checkout\n        uses: actions/checkout@v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "which is a depin" in result.stdout
+
+
+def test_refuses_depinning_even_when_the_release_comment_moves_too(tmp_path):
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n        uses: actions/checkout@{SHA} # v7\n",
+        "      - name: Checkout\n        uses: actions/checkout@v8 # v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "which is a depin" in result.stdout
+
+
+def test_still_accepts_a_first_time_pin_after_the_depin_check(tmp_path):
+    # The direction that has to keep working: Renovate's pinDigests adds the
+    # SHA, so the action gains a pin rather than losing one.
+    result = _check_in_repo(
+        tmp_path,
+        "      - name: Checkout\n        uses: actions/checkout@v7\n",
+        f"      - name: Checkout\n        uses: actions/checkout@{SHA} # v7\n",
+    )
+    assert result.returncode == 0, result.stdout
+
+
+def test_still_accepts_an_ordinary_sha_bump_after_the_depin_check(tmp_path):
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n        uses: actions/checkout@{SHA} # v7\n",
+        f"      - name: Checkout\n        uses: actions/checkout@{OTHER_SHA} # v8\n",
+    )
+    assert result.returncode == 0, result.stdout
+
+
+def test_accepts_two_uses_of_one_action_bumped_different_ways(tmp_path):
+    # CodeRabbit's follow-up on gh-actions#7, and a real false positive in the
+    # first version of the depin check: one file using the same action twice,
+    # with the pinned occurrence bumped SHA to SHA and the unpinned one bumped
+    # v7 to v8, put that action on both sides of a set intersection although
+    # nothing was depinned. Counting pinned occurrences rather than matching
+    # names is what tells the two apart: checkout ends with one SHA pin, the
+    # same as it started with.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n"
+        f"        uses: actions/checkout@{SHA} # v7\n"
+        f"      - name: Checkout again\n"
+        f"        uses: actions/checkout@v7\n",
+        f"      - name: Checkout\n"
+        f"        uses: actions/checkout@{OTHER_SHA} # v8\n"
+        f"      - name: Checkout again\n"
+        f"        uses: actions/checkout@v8\n",
+    )
+    assert result.returncode == 0, result.stdout
+
+
+def test_still_refuses_when_one_of_two_occurrences_is_depinned(tmp_path):
+    # The other half of the same shape: two pinned occurrences, one of which
+    # loses its SHA. The count drops, so it is still caught.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n"
+        f"        uses: actions/checkout@{SHA} # v7\n"
+        f"      - name: Checkout again\n"
+        f"        uses: actions/checkout@{SHA} # v7\n",
+        f"      - name: Checkout\n"
+        f"        uses: actions/checkout@{OTHER_SHA} # v8\n"
+        f"      - name: Checkout again\n"
+        f"        uses: actions/checkout@v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "which is a depin" in result.stdout
+
+
+def test_refuses_a_pin_swapped_between_two_occurrences(tmp_path):
+    # CodeRabbit's second follow-up on gh-actions#7. Counting pinned
+    # occurrences was not enough: this swap leaves the totals equal at one
+    # each, and the normalized line multiset matches too, while the first step
+    # still ends up mutable. Only a per-position comparison catches it.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: First\n"
+        f"        uses: actions/checkout@{SHA} # v7\n"
+        f"      - name: Second\n"
+        f"        uses: actions/checkout@v7\n",
+        f"      - name: First\n"
+        f"        uses: actions/checkout@v8\n"
+        f"      - name: Second\n"
+        f"        uses: actions/checkout@{OTHER_SHA} # v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "which is a depin" in result.stdout
+
+
+def test_refuses_a_swap_between_two_different_actions(tmp_path):
+    # CodeRabbit's third follow-up on gh-actions#7. Comparing pin state per
+    # position was still not enough: swapping which of two different actions
+    # carries the SHA leaves the pin-state vector identical, pinned then
+    # loose, while actions/checkout still ends up on a mutable ref.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: First\n"
+        f"        uses: actions/checkout@{SHA} # v7\n"
+        f"      - name: Second\n"
+        f"        uses: actions/setup-python@v5\n",
+        f"      - name: First\n"
+        f"        uses: actions/setup-python@{OTHER_SHA} # v5\n"
+        f"      - name: Second\n"
+        f"        uses: actions/checkout@v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "changed action" in result.stdout
+
+
+def test_refuses_a_uses_pin_in_a_file_whose_base_is_unproven(tmp_path):
+    # An allowed path outside .github/workflows/ grades with the same action
+    # grammars but is not refused by parse for being unreconstructed, so
+    # without this it skipped the depin check entirely.
+    diff = _diff(
+        ".pre-commit-config.yaml",
+        f"       hooks:\n"
+        f"-        uses: actions/checkout@{SHA} # v7\n"
+        f"+        uses: actions/checkout@v8\n",
+    )
+    result = _check(diff)
+    assert result.returncode == 1, result.stdout
+    assert "could not be proven" in result.stdout

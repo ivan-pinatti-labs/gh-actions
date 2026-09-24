@@ -1130,3 +1130,16 @@ def test_accepts_a_pip_pin_in_a_workflow_with_a_proven_base(tmp_path):
         PIP_IN_RUN.format(version="3.3.11"),
     )
     assert result.returncode == 0, result.stdout
+
+
+def test_refuses_moving_an_action_off_its_sha_onto_a_tag(tmp_path):
+    # The depin check is grammar independent, so it has to hold here too,
+    # where the action grammars strip the SHA rather than substituting a
+    # placeholder for it.
+    result = _check_in_repo(
+        tmp_path,
+        f"      - name: Checkout\n        uses: actions/checkout@{SHA} # v7\n",
+        "      - name: Checkout\n        uses: actions/checkout@v8\n",
+    )
+    assert result.returncode == 1, result.stdout
+    assert "which is a depin" in result.stdout
