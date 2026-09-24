@@ -1,0 +1,30 @@
+# Matches ivan-pinatti-labs/rsync-crypt's, with the paths this repository
+# actually has. Worth being explicit about why it exists at all: the
+# checklist-dev-python hook passes `--extend-select S`, which is a floor
+# rather than a full configuration. `--extend-select` adds to whatever the
+# repository selects and never replaces it, so a repository with no ruff.toml
+# gets ruff's defaults (E and F) plus the security rules, and nothing else.
+# This repository holds the code that grades every other repository's merges
+# and was the most loosely linted of the eight.
+target-version = "py314"
+line-length = 88
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort, import ordering
+    "B",   # flake8-bugbear, likely bugs and design problems
+    "S",   # flake8-bandit, the security rules the hook's floor turns on
+    "UP",  # pyupgrade, don't keep idioms the target version obsoletes
+    "C4",  # flake8-comprehensions
+    "RUF", # ruff's own rules
+]
+
+[lint.per-file-ignores]
+# The suite asserts, builds throwaway repositories in tmp_path, and drives the
+# real command line: every one of these is the point of a test here rather
+# than a finding. `src/*` keeps the subprocess rules, because nothing in the
+# library shells out and a future call should have to justify itself.
+"tests/*" = ["S101", "S103", "S105", "S108", "S404", "S603", "S607"]

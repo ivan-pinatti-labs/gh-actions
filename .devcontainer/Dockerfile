@@ -5,7 +5,7 @@
 # The base image is pinned by digest. BASE_IMAGE is a build argument only so a
 # change to the base image can be tested against this repository before it is
 # published.
-ARG BASE_IMAGE=ghcr.io/ivan-pinatti-labs/devcontainer-base@sha256:db75fbbf8972f6f1d7746c06238fbf15a387e224947e0e0dd5bf4d5fe3844d0b
+ARG BASE_IMAGE=ghcr.io/ivan-pinatti-labs/devcontainer-base@sha256:3593f7cdc52abe2e6a34c32145a920c2cad3b72efc24aaa0130f4464822bf17c
 FROM ${BASE_IMAGE}
 
 USER 0:0
@@ -19,10 +19,11 @@ USER 0:0
 # other repositories it carries keys for (NodeSource and HashiCorp), and the
 # reasoning behind all of this.
 #
-# python3-pytest and python3-yaml are what this repository's own suite needs:
-# pytest to run the equivalence tests, and PyYAML because the pin-only library
-# reads its configuration from YAML. Both come from Ubuntu rather than pip,
-# for the same provenance reason the rest of this organization does.
+# python3-pytest, python3-pytest-cov and python3-yaml are what this
+# repository's own suite needs: pytest to run the tests, pytest-cov to measure
+# what they reach, and PyYAML because the pin-only library reads its
+# configuration from YAML. All from Ubuntu rather than pip, for the same
+# provenance reason the rest of this organization does.
 #
 # A project created from this template adds what it needs here. Prefer a
 # distribution package, then a vendor's own signed apt repository, then the
@@ -46,6 +47,7 @@ RUN printf '%s\n' \
     gh \
     pre-commit \
     python3-pytest \
+    python3-pytest-cov \
     python3-yaml \
   && rm -rf /var/lib/apt/lists/*
 
