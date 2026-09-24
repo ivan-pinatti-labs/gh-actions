@@ -79,7 +79,9 @@ on:
         default: ""
       bots:
         description: >-
-          Newline separated dependency bots eligible for the pin-only lane.
+          Comma separated dependency bots eligible for the pin-only lane.
+          Comma separated to match reusable-bot-auto-merge.yml, whose job
+          condition has to match the list exactly in a workflow expression.
         required: false
         type: string
         default: "renovate[bot]"
@@ -497,9 +499,12 @@ jobs:
           set -euo pipefail
           is_bot=false
           if [ "$NO_BOTS" != "true" ]; then
-            while IFS= read -r bot; do
+            # `|| [ -n "$bot" ]` because the last element carries no
+              # trailing newline, so a bare `read` returns non-zero on it and
+              # the loop would silently skip the last bot in the list.
+              while IFS= read -r bot || [ -n "$bot" ]; do
               [ -n "$bot" ] && [ "$bot" = "$AUTHOR" ] && is_bot=true
-            done <<< "$BOTS"
+            done < <(printf '%s' "$BOTS" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           fi
 
           if [ "$is_bot" = "true" ] && [ "$IS_FORK" = "false" ]; then
@@ -612,9 +617,12 @@ jobs:
           if [ "$NO_BOTS" = "true" ]; then
             verdict_args+=(--no-bots)
           else
-            while IFS= read -r bot; do
+            # `|| [ -n "$bot" ]` because the last element carries no
+              # trailing newline, so a bare `read` returns non-zero on it and
+              # the loop would silently skip the last bot in the list.
+              while IFS= read -r bot || [ -n "$bot" ]; do
               [ -n "$bot" ] && verdict_args+=(--bot "$bot")
-            done <<< "$BOTS"
+            done < <(printf '%s' "$BOTS" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           fi
           printf '%s' "$payload" \
             | python3 .gh-actions-library/src/review_verdict.py \
