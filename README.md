@@ -75,8 +75,8 @@ lane. The configuration file is deliberately not in its own `allowed_paths`.
 
 Nothing runs on the host. In a
 [devcontainer-airlock](https://github.com/ivan-pinatti-labs/devcontainer-airlock)
-workbench, `make test` runs the equivalence suite in L2, and `make claude`,
-`make codex` and `make unlock` start the workbenches; see
+workbench, `make test` runs the equivalence suite in L2, `make claude` and
+`make codex` start the workbenches, and `make unlock` unlocks the ssh key; see
 [.devcontainer/README.md](.devcontainer/README.md).
 
 Two rules specific to this repository, both in [AGENTS.md](AGENTS.md):
