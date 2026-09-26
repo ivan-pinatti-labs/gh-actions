@@ -28,7 +28,7 @@ on:
   schedule:
     # :11, offset from every sibling repository's hourly sweep so this
     # organization's gates do not land on the same Actions minute. Taken:
-    # rsync-crypt and .github at :47, devcontainer-images and github-template
+    # rsync-crypt and .github at :47, devcontainer-airlock and github-template
     # at :53, pre-commit-checklists at :41, pre-commit-checklists-demo at :31,
     # docker-torrent-box-with-vpn at :47.
     - cron: "11 * * * *"

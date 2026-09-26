@@ -31,8 +31,8 @@ approves and merges it without a person.
 
 ## Conventions
 
-- Nothing runs on the host. `make test` builds the development container and
-  runs the suite inside it.
+- Nothing runs on the host. `make test` runs the suite in L2, in a
+  devcontainer-airlock workbench.
 - Grammars are kept separate rather than converged where two repositories
   behaved differently, because these decide what a dependency bot may merge
   unattended. Converging one is a change with its own test, not a tidy up.

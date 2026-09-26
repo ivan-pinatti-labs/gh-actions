@@ -73,9 +73,11 @@ lane. The configuration file is deliberately not in its own `allowed_paths`.
 
 ## Contributing
 
-Nothing runs on the host. `make test` builds the development container and runs
-the equivalence suite inside it; `make shell` opens a shell in the same
-container.
+Nothing runs on the host. In a
+[devcontainer-airlock](https://github.com/ivan-pinatti-labs/devcontainer-airlock)
+workbench, `make test` runs the equivalence suite in L2, and `make claude`,
+`make codex` and `make unlock` start the workbenches; see
+[.devcontainer/README.md](.devcontainer/README.md).
 
 Two rules specific to this repository, both in [AGENTS.md](AGENTS.md):
 

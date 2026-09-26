@@ -24,7 +24,7 @@ is the point: widening the lane is a decision, not a dependency update.
 allowed_paths:
   - .pre-commit-config.yaml
   - .github/workflows/
-  - .devcontainer/Dockerfile
+  - .devcontainer/l2/Dockerfile
 
 # Grammars applied to a changed line when no rule below matches its path.
 default_grammars:
@@ -36,7 +36,7 @@ default_grammars:
 # path can sit above a directory prefix.
 rules:
   # An exact path.
-  - path: .devcontainer/Dockerfile
+  - path: .devcontainer/l2/Dockerfile
     grammars: [image_digest]
 
   # A directory prefix, when the value ends in `/`.
