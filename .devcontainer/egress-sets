@@ -1,0 +1,3 @@
+# Egress sets this repository needs beyond workbench, github and ghcr (always on).
+python
+node

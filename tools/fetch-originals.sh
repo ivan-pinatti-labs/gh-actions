@@ -19,6 +19,16 @@ mkdir -p "${out}"
 # Do not "refresh" these to HEAD. There is nothing newer to compare against:
 # the originals are frozen by definition, and the fetch failing is what a
 # refresh would buy.
+# Public files at a pinned commit, straight from GitHub's raw file host. No
+# token is needed, so this runs in L2 through the egress proxy as well as in
+# CI. devcontainer-images was renamed devcontainer-airlock on 2026-09-26; the
+# originals keep the old name, their commits do not move.
+fetch() {
+  local repo="$1"
+  [ "${repo}" = devcontainer-images ] && repo=devcontainer-airlock
+  curl -fsSL "https://raw.githubusercontent.com/ivan-pinatti-labs/${repo}/$2/$3"
+}
+
 declare -A pinned=(
   [rsync-crypt]=7984436dc174c6c8daddfa1961615247127669c0
   [devcontainer-images]=b71cc9aa3a8f3c2b25b0861304ed575a616a586a
@@ -46,16 +56,14 @@ for repo in rsync-crypt devcontainer-images github-template \
             docker-torrent-box-with-vpn; do
   sha="${pinned[${repo}]}"
 
-  gh api "repos/ivan-pinatti-labs/${repo}/contents/scripts/assert-pin-only-diff.py?ref=${sha}" \
-    --jq .content | base64 -d > "${out}/${repo}.py"
+  fetch "${repo}" "${sha}" scripts/assert-pin-only-diff.py > "${out}/${repo}.py"
   printf 'pin-only   %-30s %s lines  @%s\n' \
     "${repo}" "$(wc -l < "${out}/${repo}.py")" "${sha:0:8}"
 
   source_file="${arg_sources[${repo}]:-}"
   if [ -n "${source_file}" ]; then
     mkdir -p "${out}/${repo}/$(dirname "${source_file}")"
-    gh api "repos/ivan-pinatti-labs/${repo}/contents/${source_file}?ref=${sha}" \
-      --jq .content | base64 -d > "${out}/${repo}/${source_file}"
+    fetch "${repo}" "${sha}" "${source_file}" > "${out}/${repo}/${source_file}"
     printf 'arg source %-30s %s\n' "${repo}" "${source_file}"
   fi
 done
@@ -66,8 +74,7 @@ for repo in rsync-crypt devcontainer-images github-template \
             pre-commit-checklists pre-commit-checklists-demo \
             docker-torrent-box-with-vpn .github; do
   sha="${pinned[${repo}]}"
-  gh api "repos/ivan-pinatti-labs/${repo}/contents/scripts/coderabbit-review-verdict.py?ref=${sha}" \
-    --jq .content | base64 -d > "${out}/verdict-${repo}.py"
+  fetch "${repo}" "${sha}" scripts/coderabbit-review-verdict.py > "${out}/verdict-${repo}.py"
   printf 'verdict    %-30s %s lines  @%s\n' \
     "${repo}" "$(wc -l < "${out}/verdict-${repo}.py")" "${sha:0:8}"
 done
