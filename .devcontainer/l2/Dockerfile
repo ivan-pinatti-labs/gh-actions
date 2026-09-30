@@ -4,7 +4,7 @@
 # fixtures they compare against are public files that
 # tools/fetch-originals.sh downloads without a token, so `make test` runs the
 # whole thing in L2 with `l2 --net`.
-ARG L2_IMAGE=ghcr.io/ivan-pinatti-labs/airlock-l2@sha256:0c4088caf9bddc39177cafabe0f0a11f3d7cbbebbc2523ece55e93cc8ff79257
+ARG L2_IMAGE=ghcr.io/ivan-pinatti-labs/airlock-l2@sha256:e5539206e6643900a32d9f059e739bc899be4923efce886627d291bf1773591d
 # hadolint ignore=DL3006
 FROM ${L2_IMAGE}
 USER 0:0
