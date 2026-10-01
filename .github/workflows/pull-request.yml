@@ -301,8 +301,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Python-based tooling
-        run: pip install pytest pytest-cov pyyaml
+      # tests/requirements.txt is the whole test environment, locked with
+      # hashes; wheels only, so no package's setup script runs at install
+      # time. The same lock `make coverage` installs.
+      - name: Install dependencies
+        run: >-
+          pip install --require-hashes --only-binary=:all:
+          --requirement tests/requirements.txt
 
       - name: Fetch the originals this suite compares against
         env:

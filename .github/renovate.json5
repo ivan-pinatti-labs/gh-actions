@@ -79,24 +79,29 @@
   // every uses: SHA pin under .github/workflows/; pre-commit covers
   // .pre-commit-config.yaml's rev:; dockerfile covers the L2 image digest
   // .devcontainer/l2/Dockerfile pins, scoped to that one file by the
-  // packageRules entry further down. There is no custom.regex manager any
-  // more: the only thing it watched was .devcontainer/asdf-plugins, which
-  // went with asdf. github-actions and pre-commit are also configured,
+  // packageRules entry further down. custom.regex once watched
+  // .devcontainer/asdf-plugins, which went with asdf; it now watches the
+  // Makefile's two coverage images instead. github-actions and pre-commit
+  // are also configured,
   // disabled, in dependabot.yml; see the file header above. Dropping either
   // of those two managers from this list is the other half of switching that
   // ecosystem back to Dependabot, alongside raising its
   // open-pull-requests-limit there.
   //
-  // pip-compile covers tests/requirements.in, the exact pins the SonarQube
-  // workflow installs the test suite from, and regenerates the hash locked
+  // pip-compile covers tests/requirements.in, the exact pins the `Tests` job
+  // and `make coverage` install the test suite from, and regenerates the hash locked
   // tests/requirements.txt by replaying the uv command in its header. Its
   // `--exclude-newer=P7D` is a rolling window, so a replay never resolves a
   // release younger than seven days, transitive ones included.
+  //
+  // custom.regex watches the two container images the Makefile's `coverage`
+  // target runs, by digest only; see customManagers at the end of this file.
   enabledManagers: [
     "github-actions",
     "pre-commit",
     "dockerfile",
     "pip-compile",
+    "custom.regex",
   ],
 
   "pip-compile": {
@@ -241,6 +246,30 @@
       matchManagers: ["github-actions"],
       matchDepTypes: ["github-runner", "uses-with"],
       enabled: false,
+    },
+    // The two images `make coverage` runs in the Makefile move by digest
+    // only. A tag change is not a pin bump: python 3.12 is the interpreter
+    // the tests and SonarQube's python version setting assume, and kcov
+    // publishes nothing but `latest`.
+    {
+      matchManagers: ["custom.regex"],
+      matchFileNames: ["Makefile"],
+      matchUpdateTypes: ["major", "minor", "patch"],
+      enabled: false,
+    },
+  ],
+
+  customManagers: [
+    {
+      // The container images in the Makefile, each annotated the way
+      // Renovate documents for a regex manager:
+      //   # renovate: datasource=docker depName=<image>
+      //   NAME ?= <image>:<tag>@sha256:<digest>
+      customType: "regex",
+      managerFilePatterns: ["/^Makefile$/"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+[A-Z_]+ \\?= \\S+?:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})",
+      ],
     },
   ],
 }

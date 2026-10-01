@@ -34,6 +34,13 @@ the project created from this template has its own conventions.
    In a workbench, `l2-pre-commit run --all-files` instead: the workbench
    has no `pre-commit` of its own, and this runs the hooks in L2.
 
+   `make coverage` runs the Python tests under coverage.py and the shell
+   tests under kcov, each in a podman container, and fails unless both reach
+   100%: the Python by lines and branches, the shell by lines. It needs
+   podman on `PATH`, and it also runs as a pre-push hook, so run
+   `pre-commit install` again in an existing clone to pick up that stage. A
+   new script ships with tests that reach every line of it.
+
 4. Commit using [Conventional Commits](https://www.conventionalcommits.org/),
    for example `fix: correct a typo in the README`. No ticket prefix is
    required by default.
