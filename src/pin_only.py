@@ -41,8 +41,11 @@ docs/GRAMMARS.md for what each named grammar matches.
 
 import argparse
 import hashlib
+import json
 import re
 import sys
+import urllib.parse
+import urllib.request
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -174,6 +177,26 @@ REQUIREMENT_LINE = re.compile(
     r"^(?P<prefix>[A-Za-z0-9][A-Za-z0-9._-]*"
     r"(?:\[[A-Za-z0-9,._-]+\])?==)" + RELEASE + r"[ \t]*$"
 )
+
+# A whole requirements file locked with hashes, as `uv pip compile
+# --generate-hashes` writes it. Graded as a file rather than line by line; see
+# `_hash_locked_problems`.
+HASH_LOCKED = "hash_locked_requirements"
+
+# One logical requirement of such a file, its continuation lines already
+# joined: a name, optional extras, an exact version, an optional environment
+# marker, then one or more sha256 hashes and nothing else.
+LOCKED_REQUIREMENT = re.compile(
+    r"^(?P<name>[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)"
+    r"(?P<extras>\[[A-Za-z0-9,._ -]*\])?"
+    r"==(?P<version>[0-9][0-9A-Za-z.!+_-]*)"
+    r"(?P<marker>[ \t]*;[^\\#]*?)?"
+    r"(?P<hashes>(?:[ \t]+--hash=sha256:[0-9a-f]{64})+)$"
+)
+LOCKED_HASH = re.compile(r"--hash=sha256:(?P<digest>[0-9a-f]{64})")
+
+# Where PyPI publishes the files of one release, with their sha256 digests.
+PYPI_RELEASE_JSON = "https://pypi.org/pypi/{name}/{version}/json"
 
 # An `ARG NAME=<release>` whose name an annotation above it made eligible.
 ARG_PIN = re.compile(
@@ -445,6 +468,10 @@ GRAMMARS: dict[str, object] = {
         r"\g<prefix><version>", line
     ),
     "version": lambda line, cfg: VERSION.sub(r"\g<prefix><version>", line),
+    # File level, not line level: see `_hash_locked_problems`. Line by line it
+    # changes nothing, and `main` grades a file under it as a whole instead of
+    # comparing its lines.
+    HASH_LOCKED: lambda line, cfg: line,
     "annotated_arg": lambda line, cfg: _normalize_annotated_arg(line, cfg),
     "arg_pin": lambda line, cfg: ARG_PIN.sub(
         lambda m: (
@@ -512,6 +539,217 @@ def _normalize_annotated_arg(line: str, cfg: Config) -> str:
     # unchanged either way, so the edit shows up as a structural mismatch
     # instead of being waved through.
     return line
+
+
+# `hash_locked_requirements`: a requirements file locked with hashes.
+#
+# A line grammar cannot grade one. A bump moves the version line and replaces
+# that package's whole run of `--hash=sha256:` lines, often with a different
+# number of them (a release publishes as many wheels as it publishes), and may
+# move transitive packages and their `# via` comments along with it. Line by
+# line that is a pile of unmatched hashes, and the only thing that can say
+# whether a new hash is legitimate is the index that published it. So the file
+# is read whole on both sides and graded as a lock:
+#
+# * every package keeps its name, extras and marker, and none is added or
+#   removed (a new transitive dependency is new code, and waits for a person);
+# * nothing else in the file changes, header and options included, except the
+#   `# via` comments under each package;
+# * every hash of a package whose version or hashes changed is one PyPI
+#   publishes for that exact name and version.
+#
+# Any failure, including PyPI being unreachable, refuses the diff. The check
+# fetches from the network, so it runs wherever this file does: the runner of
+# the reusable gate or the composite action, which reach pypi.org directly.
+
+
+class _LockError(ValueError):
+    """A hash locked file that cannot be read as one."""
+
+
+@dataclass(frozen=True)
+class LockedRequirement:
+    """One package of a hash locked requirements file."""
+
+    # The canonical name, extras and marker: what a bump may not change.
+    key: str
+    # The name as written, for the PyPI query.
+    name: str
+    version: str
+    hashes: frozenset[str]
+
+
+def _canonical_name(name: str) -> str:
+    """A package name as PyPI compares it (PEP 503)."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _logical_lines(lines: list[str]) -> list[str]:
+    """Join continued lines, and drop the indented `# via` comments.
+
+    A comment never continues a line, and one inside a continued requirement
+    is refused rather than interpreted: no lock generator writes one, and
+    pip's own reading of that case is subtle enough not to guess at.
+    """
+    logical: list[str] = []
+    pending: list[str] | None = None
+    for number, line in enumerate(lines, start=1):
+        is_comment = line.lstrip().startswith("#")
+        if pending is None and is_comment and line[:1] in (" ", "\t"):
+            continue
+        if pending is not None and is_comment:
+            raise _LockError(f"line {number}: a comment inside a continued line")
+        if not is_comment and line.rstrip().endswith("\\"):
+            pending = [*(pending or []), line.rstrip()[:-1]]
+            continue
+        if pending is None:
+            logical.append(line)
+        else:
+            logical.append(" ".join(piece.strip() for piece in [*pending, line]))
+            pending = None
+    if pending is not None:
+        raise _LockError("the file ends inside a continued line")
+    return logical
+
+
+def _read_lock(
+    lines: list[str],
+) -> tuple[list[tuple[str, str]], list[LockedRequirement]]:
+    """Split a hash locked file into its shape and its requirements.
+
+    The shape is every logical line in order, a requirement standing in as
+    its key: what a version bump may not change. A line that is neither a
+    comment, an option nor a requirement pinned with `==` and hashes is
+    refused, so an unpinned or unhashed line can never pass as a bump.
+    """
+    shape: list[tuple[str, str]] = []
+    requirements: list[LockedRequirement] = []
+    for text in _logical_lines(lines):
+        stripped = text.strip()
+        if not stripped or stripped.startswith(("#", "-")):
+            shape.append(("line", text))
+            continue
+        match = LOCKED_REQUIREMENT.match(stripped)
+        if not match:
+            raise _LockError(f"not pinned with `==` and hashes: {stripped[:80]}")
+        marker = (match.group("marker") or "").strip()
+        key = _canonical_name(match.group("name")) + (match.group("extras") or "")
+        if marker:
+            key += " " + marker
+        requirements.append(
+            LockedRequirement(
+                key=key,
+                name=match.group("name"),
+                version=match.group("version"),
+                hashes=frozenset(
+                    h.group("digest")
+                    for h in LOCKED_HASH.finditer(match.group("hashes"))
+                ),
+            )
+        )
+        shape.append(("requirement", key))
+    return shape, requirements
+
+
+def _pypi_sha256s(name: str, version: str) -> frozenset[str]:
+    """Every sha256 PyPI publishes for the files of one release.
+
+    Raises OSError when PyPI cannot be reached or answers with an error, and
+    ValueError when its answer is not the JSON this expects.
+    """
+    url = PYPI_RELEASE_JSON.format(
+        name=urllib.parse.quote(name, safe=""),
+        version=urllib.parse.quote(version, safe=""),
+    )
+    request = urllib.request.Request(  # noqa: S310 (a fixed https URL)
+        url, headers={"Accept": "application/json", "User-Agent": "pin-only"}
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
+        data = json.load(response)
+    try:
+        return frozenset(str(entry["digests"]["sha256"]) for entry in data["urls"])
+    except (KeyError, TypeError) as error:
+        raise ValueError(f"unexpected answer from PyPI: {error!r}") from error
+
+
+def _unpublished_hashes(path: str, requirement: LockedRequirement) -> list[str]:
+    """Refuse a requirement carrying a hash PyPI does not list for it."""
+    pin = f"{requirement.name}=={requirement.version}"
+    try:
+        published = _pypi_sha256s(requirement.name, requirement.version)
+    except (OSError, ValueError) as error:
+        return [
+            f"{path}: could not confirm {pin}'s hashes with PyPI ({error}), "
+            "so it is not graded as a pin"
+        ]
+    unknown = sorted(requirement.hashes - published)
+    if unknown:
+        return [
+            f"{path}: {pin} carries {len(unknown)} hash(es) PyPI does not "
+            f"publish for that release, the first sha256:{unknown[0]}"
+        ]
+    return []
+
+
+def _hash_locked_file_problems(
+    path: str, base: list[str], head: list[str]
+) -> list[str]:
+    """Grade both whole sides of one hash locked requirements file."""
+    try:
+        base_shape, base_requirements = _read_lock(base)
+        head_shape, head_requirements = _read_lock(head)
+    except _LockError as error:
+        return [f"{path}: {error}"]
+
+    was = {r.key for r in base_requirements}
+    now = {r.key for r in head_requirements}
+    problems = [
+        f"{path}: adds package {key}, which is not a version bump"
+        for key in sorted(now - was)
+    ] + [
+        f"{path}: removes package {key}, which is not a version bump"
+        for key in sorted(was - now)
+    ]
+    if problems:
+        return problems
+    if base_shape != head_shape:
+        return [
+            f"{path}: changes something other than a version, its hashes or "
+            "a `# via` comment"
+        ]
+
+    # Equal shapes put the same key at the same position on both sides.
+    for old, new in zip(base_requirements, head_requirements, strict=True):
+        if (old.version, old.hashes) != (new.version, new.hashes):
+            problems.extend(_unpublished_hashes(path, new))
+    return problems
+
+
+def _is_hash_locked(path: str, cfg: Config) -> bool:
+    rule = cfg.rule_for(path)
+    return rule is not None and any(g.name == HASH_LOCKED for g in rule.grammars)
+
+
+def _hash_locked_problems(diff_lines: list[str], paths: set[str]) -> list[str]:
+    """Grade every hash locked file in the diff as a whole.
+
+    Both sides are needed whole, so a file whose base cannot be proven to be
+    the diff's own (see `_reconstructed_files`) is refused outright.
+    """
+    if not paths:
+        return []
+    reconstructed = _reconstructed_files(diff_lines)
+    problems: list[str] = []
+    for path in sorted(paths):
+        if path not in reconstructed:
+            problems.append(
+                f"{path}: its base on main could not be proven to be this "
+                "diff's, so its hashes cannot be graded"
+            )
+            continue
+        base, head = reconstructed[path]
+        problems.extend(_hash_locked_file_problems(path, base, head))
+    return problems
 
 
 def _grammars(entries: list) -> tuple[Grammar, ...]:
@@ -625,6 +863,21 @@ def _validate(config: Config) -> None:
             + ". Known: "
             + ", ".join(sorted(GRAMMARS))
         )
+    # A file level grammar has nothing to share a rule with: the file is not
+    # read line by line at all, so any other grammar beside it would look
+    # configured and grade nothing.
+    if any(g.name == HASH_LOCKED for g in config.default_grammars):
+        sys.exit(
+            f"pin-only: {HASH_LOCKED} grades a whole file, so it belongs in a "
+            "`rules` entry for that path, not in default_grammars."
+        )
+    for rule in config.rules:
+        names = [g.name for g in rule.grammars]
+        if HASH_LOCKED in names and (len(names) > 1 or rule.raw):
+            sys.exit(
+                f"pin-only: {HASH_LOCKED} grades a whole file, so it has to be "
+                f"the only grammar of its rule, without `raw` ({rule.match})."
+            )
     for grammar in config.default_grammars + tuple(
         g for rule in config.rules for g in rule.grammars
     ):
@@ -1065,7 +1318,19 @@ def main(argv: list[str] | None = None) -> int:
 
     problems.extend(_depinned_actions(diff.splitlines()))
 
+    # Graded as whole files instead of line by line, and only once allowed:
+    # a path outside the allowlist is refused already, and asking PyPI about
+    # it would only spend a request.
+    locked = {
+        path
+        for path in changes
+        if path.startswith(_ACTIVE.allowed_paths) and _is_hash_locked(path, _ACTIVE)
+    }
+    problems.extend(_hash_locked_problems(diff.splitlines(), locked))
+
     for path, (removed, added) in changes.items():
+        if path in locked:
+            continue
         # Counter subtraction drops non-positive counts, so each direction has
         # to be asked separately to see both halves of a mismatch.
         for line in removed - added:

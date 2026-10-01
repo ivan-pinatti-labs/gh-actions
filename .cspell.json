@@ -12,6 +12,7 @@
     "bodyless",
     "bugbear",
     "buymeacoffee",
+    "capsys",
     "cffconvert",
     "checkmake",
     "codeowners",
@@ -50,6 +51,7 @@
     "keyrings",
     "korsync",
     "lazylibrarian",
+    "lineterm",
     "llms",
     "lscr",
     "makefiles",
@@ -73,6 +75,7 @@
     "pycache",
     "pycodestyle",
     "pyflakes",
+    "pypi",
     "pytest",
     "pyupgrade",
     "pyyaml",
@@ -90,6 +93,7 @@
     "timestampexpanded",
     "tonumber",
     "tostring",
+    "unhashed",
     "uniquetargets",
     "unreviewed",
     "unsanitised",
@@ -97,6 +101,7 @@
     "worktree",
     "worktrees",
     "yamllint",
-    "zizmor"
+    "zizmor",
+    "zope"
   ]
 }

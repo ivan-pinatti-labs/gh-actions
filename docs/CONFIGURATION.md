@@ -49,6 +49,12 @@ rules:
       - name: rev_pin
         when: outside_block_scalar
 
+  # A requirements file locked with hashes is graded whole, and its new
+  # hashes are checked against PyPI. See GRAMMARS.md, "The file level
+  # grammar".
+  - path: tests/requirements.txt
+    grammars: [hash_locked_requirements]
+
   # A suffix, when the value starts with `*`.
   - path: "*requirements.txt"
     grammars: [requirement_line]
