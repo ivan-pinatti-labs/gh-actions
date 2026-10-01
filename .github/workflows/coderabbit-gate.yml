@@ -47,7 +47,9 @@ permissions:
 
 jobs:
   gate:
-    uses: ./.github/workflows/reusable-coderabbit-gate.yml
+    # zizmor wants the $/ self-repository form; actionlint, pinned through
+    # pre-commit-checklists, rejects it, so ./ stays until it accepts it.
+    uses: ./.github/workflows/reusable-coderabbit-gate.yml # zizmor: ignore[self-repository]
     permissions:
       contents: read
       pull-requests: read

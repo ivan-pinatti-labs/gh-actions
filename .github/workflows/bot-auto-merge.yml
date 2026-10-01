@@ -34,7 +34,9 @@ permissions:
 
 jobs:
   bot-auto-merge:
-    uses: ./.github/workflows/reusable-bot-auto-merge.yml
+    # zizmor wants the $/ self-repository form; actionlint, pinned through
+    # pre-commit-checklists, rejects it, so ./ stays until it accepts it.
+    uses: ./.github/workflows/reusable-bot-auto-merge.yml # zizmor: ignore[self-repository]
     # `contents: write` because the called `approve-bot` job asks for it, to
     # arm `gh pr merge --auto`. A called workflow may lower the permissions it
     # is handed but never raise them, so granting less here does not degrade
