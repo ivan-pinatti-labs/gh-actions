@@ -1,7 +1,7 @@
 {
   "version": "0.2",
   "language": "en",
-  "ignorePaths": [".secrets.baseline"],
+  "ignorePaths": [".secrets.baseline", "tests/requirements.txt"],
   "words": [
     "addopts",
     "aquasec",

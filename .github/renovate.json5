@@ -55,7 +55,7 @@
 
   // config:recommended extends :ignoreModulesAndTests, whose ignorePaths
   // include "**/tests/**", and ignorePaths applies to every manager at once,
-  // so pip_requirements would never read tests/requirements.txt, silently.
+  // so pip-compile would never read tests/requirements.txt, silently.
   // ignorePaths is not mergeable, so this replaces the inherited array; the
   // two entries kept are Renovate's own bare default. Same override, for the
   // same reason, as ivan-pinatti-labs/pre-commit-checklists-demo's
@@ -87,14 +87,21 @@
   // ecosystem back to Dependabot, alongside raising its
   // open-pull-requests-limit there.
   //
-  // pip_requirements covers tests/requirements.txt, the exact pins the
-  // SonarQube workflow installs the test suite from.
+  // pip-compile covers tests/requirements.in, the exact pins the SonarQube
+  // workflow installs the test suite from, and regenerates the hash locked
+  // tests/requirements.txt by replaying the uv command in its header. Its
+  // `--exclude-newer=P7D` is a rolling window, so a replay never resolves a
+  // release younger than seven days, transitive ones included.
   enabledManagers: [
     "github-actions",
     "pre-commit",
     "dockerfile",
-    "pip_requirements",
+    "pip-compile",
   ],
+
+  "pip-compile": {
+    managerFilePatterns: ["/(^|/)requirements\\.txt$/"],
+  },
 
   // Renovate's pre-commit manager ships disabled by its own default even
   // when named in enabledManagers above (confirmed with
@@ -210,7 +217,7 @@
       labels: ["dependencies", "pre-commit"],
     },
     {
-      matchManagers: ["pip_requirements"],
+      matchManagers: ["pip-compile"],
       addLabels: ["python"],
     },
 

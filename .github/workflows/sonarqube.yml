@@ -95,7 +95,7 @@ jobs:
       - name: Install dependencies
         if: github.event_name != 'merge_group'
         run: >-
-          pip install --only-binary=:all:
+          pip install --require-hashes --only-binary=:all:
           --requirement tests/requirements.txt
 
       - name: Fetch the originals the suite compares against
