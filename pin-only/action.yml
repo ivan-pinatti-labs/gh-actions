@@ -10,6 +10,11 @@ description: >-
 # arrangement it replaces, where the script lived in the repository and the
 # gate had to check out the default branch to be sure it was reading the
 # reviewed copy.
+#
+# The `hash_locked_requirements` grammar asks PyPI for the hashes of every
+# package a lock bump moves, from inside the script, so a repository using it
+# needs this step to reach pypi.org over HTTPS. A GitHub hosted runner does;
+# one that restricts egress has to allow it. Unreachable fails closed.
 
 inputs:
   diff:
