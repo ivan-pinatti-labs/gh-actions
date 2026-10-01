@@ -1,7 +1,36 @@
-# Read by both the in-process run and, through COVERAGE_PROCESS_START, by
-# every subprocess the suite spawns.
+# Coverage settings for the Python this repository writes. Read by pytest-cov
+# through pytest.ini's addopts on every run, `make coverage` included, and,
+# through COVERAGE_PROCESS_START, by every subprocess the suite spawns.
+#
+# 100%, lines and branches both. SonarQube Cloud's Free plan quality gate is
+# fixed at 80% on new code and cannot be raised, so this is what holds the
+# higher bar. Branches too, so every `if` has been seen going both ways, not
+# only reached. tools/fetch-originals.sh is held to 100% of its lines by kcov,
+# see tools/kcov_to_sonar.py. The bash inline in the workflows under
+# .github/workflows/ is not measured by either: no tool can run it outside
+# GitHub Actions.
 [run]
-source = src
+# The library under src/ and the tooling under tools/, from the root, so
+# coverage.xml names each file by its path in the repository (src/pin_only.py,
+# not pin_only.py under a <source> SonarQube has to resolve). tests/ is not
+# the thing under test, and counting it inflates the figure with code that is
+# executed by definition; tests/originals/ under it holds the consumers'
+# fetched scripts. tools/coverage_subprocess/ is what starts coverage in a
+# spawned interpreter, so it runs before there is anything to record it.
+source = .
+omit =
+    tests/*
+    tools/coverage_subprocess/*
+branch = true
+# Paths in coverage.xml relative to the repository root, which is what
+# SonarQube Cloud resolves them against; `make coverage` runs the suite in a
+# container whose copy of the tree lives elsewhere.
+relative_files = true
 # The suite runs the library as a command many times over, so each of those
 # interpreters writes its own data file and they are combined at the end.
 parallel = true
+
+[report]
+fail_under = 100
+show_missing = true
+skip_covered = true
