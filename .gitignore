@@ -35,3 +35,5 @@ tests/originals/
 # interpreter writes its own file before they are combined.
 .coverage
 .coverage.*
+# The report .github/workflows/sonarqube.yml writes for SonarQube Cloud.
+coverage.xml

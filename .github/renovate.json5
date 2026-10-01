@@ -53,6 +53,15 @@
   // ivan-pinatti-labs/.github's README.md under "Dependency policy".
   schedule: ["before 7am"],
 
+  // config:recommended extends :ignoreModulesAndTests, whose ignorePaths
+  // include "**/tests/**", and ignorePaths applies to every manager at once,
+  // so pip_requirements would never read tests/requirements.txt, silently.
+  // ignorePaths is not mergeable, so this replaces the inherited array; the
+  // two entries kept are Renovate's own bare default. Same override, for the
+  // same reason, as ivan-pinatti-labs/pre-commit-checklists-demo's
+  // renovate.json5, where it was confirmed with a dry-run=extract.
+  ignorePaths: ["**/node_modules/**", "**/bower_components/**"],
+
   labels: ["dependencies"],
   commitMessagePrefix: "chore:",
 
@@ -77,7 +86,15 @@
   // of those two managers from this list is the other half of switching that
   // ecosystem back to Dependabot, alongside raising its
   // open-pull-requests-limit there.
-  enabledManagers: ["github-actions", "pre-commit", "dockerfile"],
+  //
+  // pip_requirements covers tests/requirements.txt, the exact pins the
+  // SonarQube workflow installs the test suite from.
+  enabledManagers: [
+    "github-actions",
+    "pre-commit",
+    "dockerfile",
+    "pip_requirements",
+  ],
 
   // Renovate's pre-commit manager ships disabled by its own default even
   // when named in enabledManagers above (confirmed with
@@ -191,6 +208,10 @@
       groupName: "pre-commit hooks",
       groupSlug: "pre-commit-hooks",
       labels: ["dependencies", "pre-commit"],
+    },
+    {
+      matchManagers: ["pip_requirements"],
+      addLabels: ["python"],
     },
 
     // The github-actions manager extracts more than uses: pins by default:

@@ -9,8 +9,11 @@ allowed_paths:
   - .pre-commit-config.yaml
   - .github/workflows/
   - .devcontainer/l2/Dockerfile
+  - tests/requirements.txt
 
 rules:
+  - path: tests/requirements.txt
+    grammars: [requirement_line]
   - path: .devcontainer/l2/Dockerfile
     grammars: [image_digest]
   - path: .github/workflows/
