@@ -64,3 +64,39 @@ Participation in this project is governed by
 
 Do not open a public issue for a security vulnerability. See
 [SECURITY.md](SECURITY.md) instead.
+
+## Updating the test dependencies
+
+`tests/requirements.in` carries the exact pins. `tests/requirements.txt` is a
+lock compiled from it with every hash, which `pip install --require-hashes`
+checks. Renovate bumps both. To change one by hand, edit the `.in` file and
+regenerate the lock in a container, from `tests/`:
+
+```bash
+podman run --rm -v "$PWD:/w:rw,Z" -w /w ghcr.io/astral-sh/uv:python3.12-trixie-slim \
+  uv pip compile --generate-hashes --python-version=3.12 --exclude-newer=P7D \
+  --output-file=requirements.txt requirements.in
+```
+
+That is the command in the lock's own header, which Renovate replays.
+`--exclude-newer=P7D` leaves out anything released in the last seven days,
+dependencies of dependencies included.
+
+### A security fix younger than seven days
+
+The seven day window also holds back a security release, and Renovate
+cannot make an exception: it replays the header's command as written, so its
+pull request for a vulnerability alert fails to regenerate the lock and says
+so. Update that one package by hand, letting it past the window, in the same
+container and from the lock's directory:
+
+```bash
+uv pip compile --generate-hashes --python-version=3.12 --exclude-newer=P7D \
+  --exclude-newer-package "<package>=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --output-file=requirements.txt requirements.in
+```
+
+Then edit the lock's header back to the standard command above, by hand.
+Left in, the per package date is fixed, so it would hold that package at
+today's releases for good. The lock itself does not change, and the next
+Renovate update replays the standard command once the fix is past the window.
