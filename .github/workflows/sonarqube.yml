@@ -13,7 +13,8 @@ name: SonarQube
 # verdict itself, reported by GitHub Actions like `Pre-commit` and `Tests`.
 # SonarQube Cloud's own GitHub App also posts a check on the pull request;
 # that one is informational only, because it is never posted on a merge
-# queue commit. Not a required check yet; see docs/MERGE_PIPELINE.md.
+# queue commit. `SonarQube` is a required check; see docs/MERGE_PIPELINE.md.
+# It replaced CodeQL, which only ever read the Python.
 #
 # Triggers:
 #   pull_request   the analysis a reviewer reads, decorated onto the pull

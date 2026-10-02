@@ -50,6 +50,7 @@
     "GOCRYPTFS",
     "gomod",
     "gsub",
+    "hotspot",
     "isort",
     "junitxml",
     "kcov",
