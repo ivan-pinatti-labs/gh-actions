@@ -11,6 +11,7 @@ allowed_paths:
   - .devcontainer/l2/Dockerfile
   - tests/requirements.in
   - tests/requirements.txt
+  - Makefile
 
 rules:
   - path: tests/requirements.in
@@ -21,6 +22,10 @@ rules:
     grammars: [hash_locked_requirements]
   - path: .devcontainer/l2/Dockerfile
     grammars: [image_digest]
+  # The images `make coverage` runs, pinned by digest; Renovate's packageRules
+  # keep their tags fixed, so only the digest ever moves.
+  - path: Makefile
+    grammars: [digest]
   - path: .github/workflows/
     grammars:
       - name: action_sha

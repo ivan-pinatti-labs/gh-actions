@@ -15,6 +15,14 @@ Run `tools/fetch-originals.sh` first; it downloads the six originals into
 `tests/originals/`, which is gitignored. The test skips rather than fails when
 they are absent, so a fresh clone is not blocked on network access.
 
+## Coverage
+
+`make coverage` holds `src/` and `tools/` at 100% of lines and branches
+(`.coveragerc`) and `tools/fetch-originals.sh` at 100% of its lines. The
+shell script is tested by `fetch-originals.test.sh`, which runs it under kcov
+against a stub `curl`, so it never reaches the network. `test_edges.py`
+covers the lines and branches the behaviour suites do not reach.
+
 ## What it caught on the first run
 
 Two real divergences, both in `docker-torrent-box-with-vpn`, and both invisible

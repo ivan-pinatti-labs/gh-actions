@@ -125,7 +125,14 @@ IMAGE_DIGEST = re.compile(
     r"(?P<prefix>^ARG [A-Z0-9_]+=[\w./-]+(?::[\w.-]+)?@)sha256:[0-9a-f]{64}$"
 )
 
-FILE_HEADER = re.compile(r"^diff --git a/(?P<old>.+) b/(?P<new>.+)$")
+# Both paths may contain " b/", and the split is at the last one that leaves a
+# nonempty new path, as a greedy `(?P<old>.+) b/(?P<new>.+)$` splits. The new
+# path is written so it cannot run past another " b/" except as its own last
+# three characters, so every split point is tried once and the match stays
+# linear instead of scanning the rest of the line again for each " b/".
+FILE_HEADER = re.compile(
+    r"^diff --git a/(?P<old>.+) b/(?P<new>(?:(?! b/).)+(?: b/)?| b/)$"
+)
 # The blob ids a diff's preamble names for each side, and a hunk's starting
 # line and length on each side (a length of one is written by omitting it).
 INDEX_LINE = re.compile(

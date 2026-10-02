@@ -1,8 +1,8 @@
 name: SonarQube
 
 # SonarQube Cloud static analysis of everything Sonar has an analyzer for: the
-# Python library under src/, tools/fetch-originals.sh, the L2 Dockerfile, YAML
-# and these workflows, plus secrets detection over every text file. Settings
+# Python under src/ and tools/, tools/fetch-originals.sh, the L2 Dockerfile,
+# YAML and these workflows, plus secrets detection over every text file. Settings
 # live in sonar-project.properties. It sits next to the pre-commit hooks, it
 # does not replace them: ruff, shellcheck, actionlint and zizmor keep running
 # on every commit through the library's checklists, and Sonar's rules are
@@ -78,38 +78,21 @@ jobs:
           # are new code, and a shallow clone makes every line look new.
           fetch-depth: 0
 
-      # Coverage for the Python. The quality gate requires 80% on new code,
-      # and with no report every new Python line counts as uncovered, so any
-      # pull request touching a .py file would fail it. The suite runs the
-      # same way the `Tests` job in pull-request.yml runs it: originals
-      # fetched first, then pytest, whose addopts in pytest.ini measure src/
-      # (subprocesses included, through tests/conftest.py) and apply the
-      # coverage floor. That job stays the gate on test results; this one
-      # only turns the measurement into a report.
-      - name: Set up Python
-        if: github.event_name != 'merge_group'
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        if: github.event_name != 'merge_group'
-        run: >-
-          pip install --require-hashes --only-binary=:all:
-          --requirement tests/requirements.txt
-
-      - name: Fetch the originals the suite compares against
-        if: github.event_name != 'merge_group'
-        run: tools/fetch-originals.sh
-
-      # pytest-cov combines the per process data files (.coveragerc sets
-      # parallel = true) into .coverage when the run ends, so coverage xml
-      # reads the combined total.
+      # Coverage of the Python and the shell, held at 100% (see the
+      # Makefile's `coverage` target): src/ and tools/ under coverage.py,
+      # lines and branches, and tools/fetch-originals.sh under kcov, lines.
+      # The quality gate also requires 80% on new code, and with no report
+      # every new line would count as uncovered. Both tools run in podman
+      # containers that see the source only through a tar stream; the runner
+      # ships podman. The Python container fetches the originals the suite
+      # compares against, as the `Tests` job in pull-request.yml does. The
+      # step is allowed to fail so SonarQube still gets the report of a run
+      # that falls short, and the last step below fails the job on it.
       - name: Measure coverage
+        id: coverage
         if: github.event_name != 'merge_group'
-        run: |
-          python3 -m pytest tests/ -q
-          coverage xml -o coverage.xml
+        continue-on-error: true
+        run: make coverage
 
       - name: Scan
         if: github.event_name != 'merge_group'
@@ -119,3 +102,12 @@ jobs:
         with:
           args: >-
             -Dsonar.qualitygate.wait=true
+
+      - name: Require 100% coverage
+        # After the scan, so a pull request below 100% still gets SonarQube's
+        # report of which lines are missing. `make coverage` above printed
+        # them too; this only carries its verdict.
+        if: github.event_name != 'merge_group' && steps.coverage.outcome == 'failure'
+        run: |
+          echo "::error::Coverage is below 100%; see the Measure coverage step."
+          exit 1
