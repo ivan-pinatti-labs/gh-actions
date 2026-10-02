@@ -46,8 +46,11 @@ the project created from this template has its own conventions.
    required by default.
 5. Open a pull request against `main` using the template in
    [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md). Open
-   it as a draft first if the checks take a while to run, and mark it ready
-   once they are green.
+   it as a draft first, and mark it ready once `Pre-commit`, `Tests` and
+   `SonarQube` are green; [docs/MERGE_PIPELINE.md](docs/MERGE_PIPELINE.md)
+   lists every required check. A fork's pull request cannot receive
+   SonarQube Cloud's token, so a maintainer pushes the branch here and opens
+   the pull request from that.
 
 ## License
 

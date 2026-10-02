@@ -16,10 +16,11 @@ on:
     types: [opened, synchronize, reopened, labeled]
     branches:
       - main
-  # The gate publishes `Pin Only` and `Review Verified`, which this lane waits
-  # on, so it wakes when that finishes rather than polling from the start.
+  # The gate publishes `Pin Only` and `Review Verified`, and SonarQube Cloud's
+  # analysis can finish after it, so the lane wakes when either finishes
+  # rather than polling from the start.
   workflow_run:
-    workflows: ["CodeRabbit Gate"]
+    workflows: ["CodeRabbit Gate", "SonarQube"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -51,7 +52,9 @@ jobs:
       owner_login: ${{ vars.REPO_OWNER_LOGIN }}
       bots: "renovate[bot]"
       pr_number: ${{ github.event.inputs.pr_number }}
-      # This repository publishes `Tests` as well, and it is the check that
-      # proves the shared library still grades every consumer the way their
-      # own script did, so the owner lane waits on it too.
-      required_contexts: "Pre-commit,Tests,Pin Only,Review Verified"
+      # This repository publishes `Tests` and `SonarQube` as well, required
+      # like the other three. `Tests` is the check that proves the shared
+      # library still grades every consumer the way their own script did, and
+      # `SonarQube` is the quality gate, so the owner lane waits on both too.
+      # The reusable workflow's default stays at the three every consumer has.
+      required_contexts: "Pre-commit,Tests,SonarQube,Pin Only,Review Verified"
