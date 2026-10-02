@@ -1,0 +1,20 @@
+# What the test suite needs, exact pins rather than `>=` floors.
+# tests/requirements.txt is compiled from this file with hashes and installed
+# by .github/workflows/sonarqube.yml with --require-hashes and wheels only.
+# Regenerate it with the command in its header, never by hand; Renovate's
+# pip-compile manager bumps a pin here and replays that command.
+#
+# A floor resolves to whatever is newest on PyPI when the job runs, which puts
+# the seven day `minimumReleaseAge` in .github/renovate.json5 out of the loop:
+# that window governs when Renovate proposes a change, not what pip installs.
+# An exact pin is also the only shape the `requirement_line` grammar in
+# .github/pin-only.yml recognizes, and the lock is graded by its
+# `hash_locked_requirements` grammar, so a bump can take the unattended lane.
+#
+# pytest-cov is needed because pytest.ini's addopts passes --cov. coverage
+# writes the report SonarQube Cloud reads. pyyaml is imported by the suite and
+# by src/pin_only.py.
+coverage==7.16.1
+pytest==9.1.1
+pytest-cov==7.1.0
+pyyaml==6.0.3
