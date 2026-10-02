@@ -30,8 +30,8 @@ mkdir -p "${out}"
 # originals keep the old name, their commits do not move.
 fetch() {
   local repo="$1"
-  [ "${repo}" = devcontainer-images ] && repo=devcontainer-airlock
-  curl -fsSL "https://raw.githubusercontent.com/ivan-pinatti-labs/${repo}/$2/$3"
+  [[ "${repo}" = devcontainer-images ]] && repo=devcontainer-airlock
+  curl -fsSL --proto '=https' --tlsv1.2 "https://raw.githubusercontent.com/ivan-pinatti-labs/${repo}/$2/$3"
 }
 
 # One assignment per line rather than a multi line ( ) list, here and below:
@@ -66,7 +66,7 @@ for repo in rsync-crypt devcontainer-images github-template \
     "${repo}" "$(wc -l < "${out}/${repo}.py")" "${sha:0:8}"
 
   source_file="${arg_sources[${repo}]:-}"
-  if [ -n "${source_file}" ]; then
+  if [[ -n "${source_file}" ]]; then
     mkdir -p "${out}/${repo}/$(dirname "${source_file}")"
     fetch "${repo}" "${sha}" "${source_file}" > "${out}/${repo}/${source_file}"
     printf 'arg source %-30s %s\n' "${repo}" "${source_file}"

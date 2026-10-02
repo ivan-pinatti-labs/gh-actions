@@ -11,6 +11,7 @@ say the same thing.
 """
 
 import io
+import itertools
 import re
 import subprocess
 import sys
@@ -224,6 +225,60 @@ def test_bare_action_version_strip_leaves_a_sha_shaped_version_alone(line, want)
 )
 def test_ordinal(n, want):
     assert pin_only._ordinal(n) == want
+
+
+# The file header pattern as it was written before it was made linear. The
+# rewrite must split every line exactly as this one does.
+GREEDY_FILE_HEADER = re.compile(r"^diff --git a/(?P<old>.+) b/(?P<new>.+)$")
+
+
+def _same_file_header(line):
+    want = GREEDY_FILE_HEADER.match(line)
+    got = pin_only.FILE_HEADER.match(line)
+    assert (got is None) == (want is None), repr(line)
+    if want is not None:
+        assert got.groupdict() == want.groupdict(), repr(line)
+        assert got.span() == want.span(), repr(line)
+
+
+@pytest.mark.parametrize(
+    ("line", "old", "new"),
+    [
+        ("diff --git a/x b/x", "x", "x"),
+        ("diff --git a/x b/y b/z", "x b/y", "z"),
+        # A " b/" that would leave the new path empty is not the split.
+        ("diff --git a/x b/y b/", "x", "y b/"),
+        ("diff --git a/x b/ b/", "x", " b/"),
+        ("diff --git a/ b/ b/x", " b/", "x"),
+        ("diff --git a/x b/y\n", "x", "y"),
+        ("diff --git a/ b/x", None, None),
+        ("diff --git a/x b/", None, None),
+        ("diff --git a/x b/y\nz", None, None),
+        ("diff --git a/x\n b/y", None, None),
+    ],
+)
+def test_file_header_splits_at_the_last_usable_b_slash(line, old, new):
+    _same_file_header(line)
+    header = pin_only.FILE_HEADER.match(line)
+    if old is None:
+        assert header is None
+    else:
+        assert (header.group("old"), header.group("new")) == (old, new)
+
+
+def test_file_header_matches_the_greedy_pattern_on_every_short_line():
+    pieces = [" b/", "b", "/", " ", "x", "\n"]
+    for length in range(6):
+        for combo in itertools.product(pieces, repeat=length):
+            _same_file_header("diff --git a/" + "".join(combo))
+
+
+def test_file_header_matches_the_greedy_pattern_on_every_fixture_line():
+    for path in sorted((ROOT / "tests" / "fixtures").rglob("*")):
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                _same_file_header(line)
+                _same_file_header(line.rstrip("\n"))
 
 
 # ---------------------------------------------------------------------------

@@ -143,7 +143,8 @@ jobs:
       # actions/setup-node for a JavaScript or TypeScript checklist.
 
       - name: Install pre-commit
-        run: pip install "pre-commit==4.5.1"
+        run: >-
+          pip install --only-binary=:all: "pre-commit==4.5.1"
 
       # A hook that only reformats, such as end-of-file-fixer, still exits
       # non-zero on the run that first finds the problem, even though the
@@ -274,7 +275,9 @@ jobs:
 
       - name: Validate renovate.json5
         shell: bash
-        run: npx --yes --package renovate@44.69.12 renovate-config-validator --strict
+        run: >-
+          npx --yes --ignore-scripts --package renovate@44.69.12
+          renovate-config-validator --strict
 
   # The equivalence suite, which is the reason this repository can replace six
   # separate implementations at all: it runs each original's own grading
