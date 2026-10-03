@@ -137,6 +137,14 @@ repos:
         files: ^\.github/
         stages: [pre-commit]
 
+      # shellcheck --severity=error, shfmt --indent 2 --write and the two
+      # shebang checks, over tools/fetch-originals.sh and its test.
+      # types: [shell] rather than a files: pattern, so a script is reached
+      # by its shebang as well as by its extension.
+      - id: checklist-dev-shell
+        types: [shell]
+        stages: [pre-commit]
+
       # check-ast, check-builtin-literals, debug-statements,
       # requirements-txt-fixer, ruff-check --fix, ruff-format.
       #

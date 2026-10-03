@@ -31,6 +31,7 @@ guaranteed response window.
 | --- | --- | --- |
 | Python under `src/`, `tools/` and `tests/` | ruff and the rest of `checklist-dev-python` | pre-commit, every commit |
 | `.github/workflows/*` | actionlint (with shellcheck over the `run:` blocks), zizmor | `checklist-github-actions`, every commit |
+| Shell | shellcheck, shfmt, shebang checks | `checklist-dev-shell`, every commit |
 | `Makefile` | checkmake | `checklist-dev-make`, every commit |
 | Everything | detect-secrets | `checklist-security-credentials`, every commit |
 | Everything SonarQube Cloud has an analyzer for: the Python, `tools/fetch-originals.sh`, the L2 `Dockerfile`, YAML, `.github/workflows/*`, secrets | SonarQube Cloud, Sonar way quality gate, plus 100% coverage through `make coverage` | `sonarqube.yml`, every pull request targeting `main` from a branch of this repository and every push to `main` |
