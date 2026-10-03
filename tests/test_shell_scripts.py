@@ -21,7 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-_SHEBANG = re.compile(rb"^#!\s*(?:/usr)?/bin/(?:env\s+)?(?:sh|bash|dash)(?:\s|$)")
+_SHEBANG = re.compile(
+    rb"^#!\s*(?:/usr)?/bin/(?:env\s+(?:-S\s+)?)?(?:sh|bash|dash)(?:\s|$)"
+)
 
 
 def _files() -> list[str]:
@@ -47,9 +49,13 @@ def _files() -> list[str]:
 
 
 def _is_shell(path: str) -> bool:
+    file = ROOT / path
+    # A path git still lists but the tree no longer has is not in the archive
+    # `make coverage` measures, so it is not a script to hold to coverage.
+    if not (file.exists() or file.is_symlink()):
+        return False
     if path.endswith((".sh", ".bash")):
         return True
-    file = ROOT / path
     if file.is_symlink() or not file.is_file():
         return False
     with file.open("rb") as handle:
@@ -67,6 +73,7 @@ def test_shebang_detection():
     assert _SHEBANG.match(b"#!/usr/bin/env bash\n")
     assert _SHEBANG.match(b"#!/bin/sh -e\n")
     assert _SHEBANG.match(b"#!/bin/dash")
+    assert _SHEBANG.match(b"#!/usr/bin/env -S bash -eu\n")
     assert not _SHEBANG.match(b"#!/usr/bin/env python3\n")
     assert not _SHEBANG.match(b"#!/usr/bin/env bashful\n")
 
@@ -79,3 +86,7 @@ def test_every_shell_script_is_measured():
         "not in the Makefile's SHELL_SCRIPTS, so `make coverage` never measures"
         f" them: {missing}"
     )
+
+
+def test_a_deleted_path_is_not_a_script():
+    assert not _is_shell("tools/no-such-script.sh")
