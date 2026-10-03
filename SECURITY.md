@@ -59,6 +59,9 @@ code:
 - duplicates more than 3% of its lines; or
 - has less than 80% of its lines covered.
 
+On a change under 20 new lines SonarQube Cloud skips the coverage and
+duplication conditions; the 100% gate below still applies.
+
 This repository holds its own code well above that floor: `make coverage`, run
 by the same job, requires 100% of the lines and branches of the Python under
 `src/` and `tools/` and 100% of the lines of `tools/fetch-originals.sh`, and
