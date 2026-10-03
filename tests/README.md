@@ -20,7 +20,9 @@ they are absent, so a fresh clone is not blocked on network access.
 `make coverage` holds `src/` and `tools/` at 100% of lines and branches
 (`.coveragerc`) and `tools/fetch-originals.sh` at 100% of its lines. The
 shell script is tested by `fetch-originals.test.sh`, which runs it under kcov
-against a stub `curl`, so it never reaches the network. `test_edges.py`
+against a stub `curl`, so it never reaches the network. `test_shell_scripts.py`
+fails when a shell script outside `tests/` is missing from the Makefile's
+`SHELL_SCRIPTS`, so a new one cannot go unmeasured. `test_edges.py`
 covers the lines and branches the behaviour suites do not reach.
 
 ## What it caught on the first run
