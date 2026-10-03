@@ -60,18 +60,18 @@ arg_sources["pre-commit-checklists"]=".devcontainer/Dockerfile"
 # The pin-only copies. .github never had one, which is the gap this work also
 # closes, so it is absent here on purpose.
 for repo in rsync-crypt devcontainer-images github-template \
-            pre-commit-checklists pre-commit-checklists-demo \
-            docker-torrent-box-with-vpn; do
+  pre-commit-checklists pre-commit-checklists-demo \
+  docker-torrent-box-with-vpn; do
   sha="${pinned[${repo}]}"
 
-  fetch "${repo}" "${sha}" scripts/assert-pin-only-diff.py > "${out}/${repo}.py"
+  fetch "${repo}" "${sha}" scripts/assert-pin-only-diff.py >"${out}/${repo}.py"
   printf 'pin-only   %-30s %s lines  @%s\n' \
-    "${repo}" "$(wc -l < "${out}/${repo}.py")" "${sha:0:8}"
+    "${repo}" "$(wc -l <"${out}/${repo}.py")" "${sha:0:8}"
 
   source_file="${arg_sources[${repo}]:-}"
   if [[ -n "${source_file}" ]]; then
     mkdir -p "${out}/${repo}/$(dirname "${source_file}")"
-    fetch "${repo}" "${sha}" "${source_file}" > "${out}/${repo}/${source_file}"
+    fetch "${repo}" "${sha}" "${source_file}" >"${out}/${repo}/${source_file}"
     printf 'arg source %-30s %s\n' "${repo}" "${source_file}"
   fi
 done
@@ -79,10 +79,10 @@ done
 # The review-verdict copies, including .github's, which is the one with no bot
 # lane and so the one the shared version has to reproduce with an empty list.
 for repo in rsync-crypt devcontainer-images github-template \
-            pre-commit-checklists pre-commit-checklists-demo \
-            docker-torrent-box-with-vpn .github; do
+  pre-commit-checklists pre-commit-checklists-demo \
+  docker-torrent-box-with-vpn .github; do
   sha="${pinned[${repo}]}"
-  fetch "${repo}" "${sha}" scripts/coderabbit-review-verdict.py > "${out}/verdict-${repo}.py"
+  fetch "${repo}" "${sha}" scripts/coderabbit-review-verdict.py >"${out}/verdict-${repo}.py"
   printf 'verdict    %-30s %s lines  @%s\n' \
-    "${repo}" "$(wc -l < "${out}/verdict-${repo}.py")" "${sha:0:8}"
+    "${repo}" "$(wc -l <"${out}/verdict-${repo}.py")" "${sha:0:8}"
 done
