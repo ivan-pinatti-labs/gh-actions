@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 _SHEBANG = re.compile(
-    rb"^#!\s*(?:/usr)?/bin/(?:env\s+(?:-S\s+)?)?(?:sh|bash|dash)(?:\s|$)"
+    rb"^#!\s*(?:\S*/)?(?:env\s+(?:-\S+\s+)*)?(?:sh|bash|dash)(?:\s|$)"
 )
 
 
@@ -74,6 +74,8 @@ def test_shebang_detection():
     assert _SHEBANG.match(b"#!/bin/sh -e\n")
     assert _SHEBANG.match(b"#!/bin/dash")
     assert _SHEBANG.match(b"#!/usr/bin/env -S bash -eu\n")
+    assert _SHEBANG.match(b"#!/usr/local/bin/bash\n")
+    assert not _SHEBANG.match(b"#!/usr/local/bin/python3\n")
     assert not _SHEBANG.match(b"#!/usr/bin/env python3\n")
     assert not _SHEBANG.match(b"#!/usr/bin/env bashful\n")
 
