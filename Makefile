@@ -72,7 +72,7 @@ test:
 COVERAGE_DIR ?= coverage
 PODMAN ?= $(if $(CONTAINER_HOST),podman-remote,podman)
 # renovate: datasource=docker depName=docker.io/library/python
-PYTHON_IMAGE ?= docker.io/library/python:3.12-trixie@sha256:4d1caded1f729ae443eb803f26ffde7b61e696aeaef62f099abb6dd6b14257c7
+PYTHON_IMAGE ?= docker.io/library/python:3.14-trixie@sha256:d0ef532dea88a06a0f950a40f95c553086c1f282bf8e313d328f11d289f72582
 # renovate: datasource=docker depName=docker.io/kcov/kcov
 KCOV_IMAGE ?= docker.io/kcov/kcov:latest@sha256:481289ae32e55e5b733019515acd10948a4f76dfed381765577db909664fc603
 SHELL_SCRIPTS := tools/fetch-originals.sh

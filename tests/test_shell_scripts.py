@@ -15,7 +15,6 @@ under test, and are left out the same way .coveragerc leaves out tests/.
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -33,16 +32,15 @@ def _files() -> list[str]:
     stream of exactly those files and no .git, so there the tree itself is
     the list.
     """
-    # No try around this: ruff's py314 target rewrites a tuple `except` into
-    # the unparenthesized form, which the 3.12 coverage image cannot parse.
-    listed = None
-    if shutil.which("git"):
+    try:
         listed = subprocess.run(
             ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
             cwd=ROOT,
             capture_output=True,
             check=False,
         )
+    except OSError:  # no git at all
+        listed = None
     if listed is None or listed.returncode != 0:
         return [p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*") if p.is_file()]
     return [name for name in listed.stdout.decode().split("\0") if name]
