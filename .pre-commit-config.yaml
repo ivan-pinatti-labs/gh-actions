@@ -242,5 +242,5 @@ repos:
         language: system
         entry: make coverage
         pass_filenames: false
-        files: '(\.py$|\.sh$|^\.coveragerc$|^pytest\.ini$|^Makefile$|requirements\.txt$)'
+        files: '(\.py$|\.(sh|bash)$|^\.coveragerc$|^pytest\.ini$|^Makefile$|requirements\.txt$)'
         stages: [pre-push]
