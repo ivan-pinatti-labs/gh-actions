@@ -36,39 +36,42 @@ fetch() {
 
 # One assignment per line rather than a multi line ( ) list, here and below:
 # kcov counts every line of such a list as a statement that never ran.
+# The keys are quoted for shfmt: it cannot see the `declare -A`, so it parses
+# a bare subscript as arithmetic, rejects `.github` outright and would rewrite
+# `rsync-crypt` as `rsync - crypt`, a different key.
 declare -A pinned
-pinned[rsync-crypt]=7984436dc174c6c8daddfa1961615247127669c0
-pinned[devcontainer-images]=b71cc9aa3a8f3c2b25b0861304ed575a616a586a
-pinned[github-template]=77437975367b372f98e3e53a84cd030b238285f4
-pinned[pre-commit-checklists]=5909372518fa52fafa5a737781ca682e12e713d2
-pinned[pre-commit-checklists-demo]=e7bffb41a16fd9017ff717cc5e56670570fe28b5
-pinned[docker-torrent-box-with-vpn]=7fdb67cbc09dff7047026d912e1a938727c40fcd
-pinned[.github]=22bbd245eed4252f9ab8627d112798208f89b3a6
+pinned["rsync-crypt"]=7984436dc174c6c8daddfa1961615247127669c0
+pinned["devcontainer-images"]=b71cc9aa3a8f3c2b25b0861304ed575a616a586a
+pinned["github-template"]=77437975367b372f98e3e53a84cd030b238285f4
+pinned["pre-commit-checklists"]=5909372518fa52fafa5a737781ca682e12e713d2
+pinned["pre-commit-checklists-demo"]=e7bffb41a16fd9017ff717cc5e56670570fe28b5
+pinned["docker-torrent-box-with-vpn"]=7fdb67cbc09dff7047026d912e1a938727c40fcd
+pinned[".github"]=22bbd245eed4252f9ab8627d112798208f89b3a6
 
 # Files whose annotated ARG names the `annotated_arg` and `arg_pin` grammars
 # read. tests/test_equivalence.py recomputes those names from this fixture
 # tree, so an absent fixture silently compares an empty set against a
 # populated one and reports a divergence that exists only in the harness.
 declare -A arg_sources
-arg_sources[rsync-crypt]="Dockerfile"
-arg_sources[devcontainer-images]="images/base/Dockerfile"
-arg_sources[pre-commit-checklists]=".devcontainer/Dockerfile"
+arg_sources["rsync-crypt"]="Dockerfile"
+arg_sources["devcontainer-images"]="images/base/Dockerfile"
+arg_sources["pre-commit-checklists"]=".devcontainer/Dockerfile"
 
 # The pin-only copies. .github never had one, which is the gap this work also
 # closes, so it is absent here on purpose.
 for repo in rsync-crypt devcontainer-images github-template \
-            pre-commit-checklists pre-commit-checklists-demo \
-            docker-torrent-box-with-vpn; do
+  pre-commit-checklists pre-commit-checklists-demo \
+  docker-torrent-box-with-vpn; do
   sha="${pinned[${repo}]}"
 
-  fetch "${repo}" "${sha}" scripts/assert-pin-only-diff.py > "${out}/${repo}.py"
+  fetch "${repo}" "${sha}" scripts/assert-pin-only-diff.py >"${out}/${repo}.py"
   printf 'pin-only   %-30s %s lines  @%s\n' \
-    "${repo}" "$(wc -l < "${out}/${repo}.py")" "${sha:0:8}"
+    "${repo}" "$(wc -l <"${out}/${repo}.py")" "${sha:0:8}"
 
   source_file="${arg_sources[${repo}]:-}"
   if [[ -n "${source_file}" ]]; then
     mkdir -p "${out}/${repo}/$(dirname "${source_file}")"
-    fetch "${repo}" "${sha}" "${source_file}" > "${out}/${repo}/${source_file}"
+    fetch "${repo}" "${sha}" "${source_file}" >"${out}/${repo}/${source_file}"
     printf 'arg source %-30s %s\n' "${repo}" "${source_file}"
   fi
 done
@@ -76,10 +79,10 @@ done
 # The review-verdict copies, including .github's, which is the one with no bot
 # lane and so the one the shared version has to reproduce with an empty list.
 for repo in rsync-crypt devcontainer-images github-template \
-            pre-commit-checklists pre-commit-checklists-demo \
-            docker-torrent-box-with-vpn .github; do
+  pre-commit-checklists pre-commit-checklists-demo \
+  docker-torrent-box-with-vpn .github; do
   sha="${pinned[${repo}]}"
-  fetch "${repo}" "${sha}" scripts/coderabbit-review-verdict.py > "${out}/verdict-${repo}.py"
+  fetch "${repo}" "${sha}" scripts/coderabbit-review-verdict.py >"${out}/verdict-${repo}.py"
   printf 'verdict    %-30s %s lines  @%s\n' \
-    "${repo}" "$(wc -l < "${out}/verdict-${repo}.py")" "${sha:0:8}"
+    "${repo}" "$(wc -l <"${out}/verdict-${repo}.py")" "${sha:0:8}"
 done
