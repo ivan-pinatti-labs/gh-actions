@@ -38,8 +38,12 @@ the project created from this template has its own conventions.
    tests under kcov, each in a podman container, and fails unless both reach
    100%: the Python by lines and branches, the shell by lines. It needs
    podman on `PATH`, and it also runs as a pre-push hook, so run
-   `pre-commit install` again in an existing clone to pick up that stage. A
-   new script ships with tests that reach every line of it.
+   `pre-commit install` again in an existing clone to pick up that stage.
+   The shell scripts it measures are found, not listed (`make
+   print-shell-scripts` shows them): any file ending in `.sh` or `.bash`, or
+   with an `sh`, `bash` or `dash` shebang, outside `tests/`. A new script is
+   therefore measured from its first commit, and ships with tests that reach
+   every line of it.
 
 4. Commit using [Conventional Commits](https://www.conventionalcommits.org/),
    for example `fix: correct a typo in the README`. No ticket prefix is

@@ -4,6 +4,7 @@
   "ignorePaths": [".secrets.baseline", "tests/requirements.txt"],
   "words": [
     "addopts",
+    "addprefix",
     "aquasec",
     "argjson",
     "automerged",
@@ -70,6 +71,7 @@
     "multiset",
     "ncipollo",
     "neighbour",
+    "nextfile",
     "nodesource",
     "nounset",
     "origv",

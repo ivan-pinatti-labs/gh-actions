@@ -65,5 +65,6 @@ duplication conditions; the 100% gate below still applies.
 
 This repository holds its own code well above that floor: `make coverage`, run
 by the same job, requires 100% of the lines and branches of the Python under
-`src/` and `tools/` and 100% of the lines of `tools/fetch-originals.sh`, and
+`src/` and `tools/` and 100% of the lines of every shell script outside
+`tests/` (found by the Makefile, today `tools/fetch-originals.sh`), and
 fails the job otherwise.
