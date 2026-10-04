@@ -92,7 +92,9 @@
   // and `make coverage` install the test suite from, and regenerates the hash locked
   // tests/requirements.txt by replaying the uv command in its header. Its
   // `--exclude-newer=P7D` is a rolling window, so a replay never resolves a
-  // release younger than seven days, transitive ones included.
+  // release younger than seven days, transitive ones included. It covers
+  // src/requirements.in and its lock the same way, the library's run time
+  // dependencies the reusable gate installs in a consumer's CI.
   //
   // custom.regex watches the two container images the Makefile's `coverage`
   // target runs, by digest only; see customManagers at the end of this file.
