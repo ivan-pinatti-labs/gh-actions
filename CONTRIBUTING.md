@@ -34,6 +34,9 @@ the project created from this template has its own conventions.
    In a workbench, `l2-pre-commit run --all-files` instead: the workbench
    has no `pre-commit` of its own, and this runs the hooks in L2.
 
+   `make test` runs the test suite in the pinned Python image, in a podman
+   container, never on the host's Python; it needs only podman on `PATH`.
+
    `make coverage` runs the Python tests under coverage.py and the shell
    tests under kcov, each in a podman container, and fails unless both reach
    100%: the Python by lines and branches, the shell by lines. It needs

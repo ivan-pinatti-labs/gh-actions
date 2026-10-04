@@ -18,25 +18,10 @@ help:
 		'' \
 		'Targets:' \
 		'  help                        Show this message.' \
-		'  test                        Fetch the originals and run the equivalence suite, in L2.' \
+		'  test                        The test suite, in the pinned Python image (podman).' \
 		'  coverage                    Python and shell coverage in containers, 100% or fail.' \
 		''
 	@$(MAKE) --no-print-directory workbench-help
-
-# The test suite, in L2 rather than in the workbench: `l2 --net` gives it the
-# working tree and a way out through the egress proxy, for the originals the
-# equivalence tests compare against (public files on GitHub, fetched without
-# a token), and nothing else. Outside a workbench there is no l2, and the
-# same commands run as they are.
-#
-# `;` rather than `&&` after the fetch on purpose. The equivalence tests skip
-# when the originals are absent, so a developer with no network still gets the
-# rest of the suite. CI keeps the fetch as its own step, where a failure is
-# loud, because there a skipped comparison is exactly what must not pass
-# silently.
-L2_NET := $(if $(shell command -v l2 2>/dev/null),l2 --net --,)
-test:
-	@$(L2_NET) bash -c 'tools/fetch-originals.sh; python3 -m pytest tests/ -v'
 
 # Coverage of everything this repository writes, held at 100%: the Python
 # under src/ and tools/ (lines and branches, .coveragerc) under coverage.py,
@@ -103,6 +88,39 @@ _sources := git ls-files -z --cached --others --exclude-standard --deduplicate \
 	tar --create --owner=0 --group=0 --numeric-owner --null --files-from="$$out/list" --file="$$out/src.tar" || exit 1
 _unpack := set -e; mkdir /tmp/w; tar -x --no-same-owner -C /tmp/w; cd /tmp/w
 _locked := --cap-drop=ALL --security-opt no-new-privileges
+
+# The test suite, in the same pinned Python image `make coverage` uses
+# (PYTHON_IMAGE below), never on the host's Python, so the suite runs on one
+# Python version everywhere. The container gets the files git would commit as
+# a tar stream on standard input and nothing else: no mount, no home
+# directory, no SSH agent, no token, no environment variable, every
+# capability dropped. It installs tests/requirements.txt, hash locked, and
+# fetches the originals the equivalence tests compare against (public files
+# on GitHub, fetched without a token), so it has the network.
+#
+# A failed fetch is reported and the suite runs anyway, on purpose. The
+# equivalence tests skip when the originals are absent, so a developer with no
+# network for GitHub still gets the rest of the suite. CI keeps the fetch as its own step, where
+# a failure is loud, because there a skipped comparison is exactly what must
+# not pass silently.
+#
+# In a devcontainer-airlock workbench there is no engine of its own, so this
+# runs itself again through `l2 --engine --net`, which gives it the L2 engine
+# and the egress proxy. Inside that run CONTAINER_HOST is set and the
+# container starts directly. Only podman is needed on the host.
+L2 := $(shell command -v l2 2>/dev/null)
+test:
+	@if [ -n "$(L2)" ] && [ -z "$${CONTAINER_HOST:-}" ]; then \
+		exec l2 --engine --net -- $(MAKE) --no-print-directory test; \
+	fi; \
+	set -u; out="$$(mktemp -d)"; trap 'rm -rf "$$out"' EXIT; \
+	$(_sources); \
+	$(PODMAN) run <"$$out/src.tar" --rm --interactive $(_locked) \
+		"$(PYTHON_IMAGE)" sh -c '$(_unpack); \
+			pip install --quiet --disable-pip-version-check --root-user-action=ignore \
+				--require-hashes --only-binary=:all: -r tests/requirements.txt; \
+			tools/fetch-originals.sh || echo "fetch failed, so the equivalence tests skip" >&2; \
+			python3 -m pytest tests/ -v'
 
 coverage:
 	@set -u; out="$$(mktemp -d)"; trap 'rm -rf "$$out"' EXIT; \

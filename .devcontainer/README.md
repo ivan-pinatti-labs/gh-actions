@@ -31,15 +31,16 @@ this repository's git hooks through L2:
 l2-hooks-install
 ```
 
-`make test` fetches the originals the equivalence suite compares against
-(public files, downloaded without a token) and runs the suite, all in L2
-with `l2 --net`.
+`make test` runs the suite in the pinned Python image `make coverage` uses,
+through the L2 engine with `l2 --engine --net`: the container fetches the
+originals the equivalence suite compares against (public files, downloaded
+without a token) and runs the suite.
 
 ## What is in here
 
 | File | What |
 | --- | --- |
-| `l2/Dockerfile` | This repository's L2 image, on the shared one pinned by digest, plus pytest, pytest-cov and PyYAML for the equivalence suite. `l2` builds it in the L2 engine the first time and whenever it changes; Renovate keeps the digest current. |
+| `l2/Dockerfile` | This repository's L2 image, the shared one pinned by digest. The test suite does not run in it but in the pinned Python image (`make test`). `l2` builds it in the L2 engine the first time and whenever it changes; Renovate keeps the digest current. |
 | `egress-sets` | The network services the egress proxy allows for this repository, one per line. |
 
 Tools come from signed package repositories: prefer a distribution package,

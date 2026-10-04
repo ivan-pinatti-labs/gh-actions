@@ -150,10 +150,13 @@ hardcoded moved into configuration.
 - **`examples/` is not documentation.** Each file reproduces one consumer's
   previous script exactly, and the equivalence suite asserts it. Editing one
   changes what that repository's test compares against.
-- **Nothing runs on the host.** `make test` runs the suite in L2 in a
-  devcontainer-airlock workbench, and as it is in CI. The host has no toolchain: this organization
-  removed asdf on 2026-09-19, so a host `pre-commit`, `npx` or `pytest` either
-  fails with "No version is set" or is the wrong one.
+- **Nothing runs on the host.** `make test` runs the suite in the pinned
+  Python image `make coverage` uses (`PYTHON_IMAGE` in the `Makefile`), so it
+  needs only Podman, and in a devcontainer-airlock workbench it reaches the
+  engine through `l2 --engine --net` by itself. Never run pytest on the
+  host's Python or in a virtual environment. The host has no toolchain: this
+  organization removed asdf on 2026-09-19, so a host `pre-commit`, `npx` or
+  `pytest` either fails with "No version is set" or is the wrong one.
 - **Reusable workflows read the library through `job.workflow_sha`**, so a
   consumer pinning the workflow pins its grading code too, with no second pin
   to drift. A relative `uses: ./` would resolve against the caller's checkout

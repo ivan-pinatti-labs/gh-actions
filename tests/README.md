@@ -11,9 +11,12 @@ So the test runs each original's `normalize()` and this library's against the
 same corpus, across every path and block scalar state that repository can see,
 and requires the answers to match exactly.
 
-Run `tools/fetch-originals.sh` first; it downloads the six originals into
-`tests/originals/`, which is gitignored. The test skips rather than fails when
-they are absent, so a fresh clone is not blocked on network access.
+Run the suite with `make test`. It runs in the pinned Python image
+`make coverage` uses, never on the host's Python, so it needs only Podman.
+In that container `tools/fetch-originals.sh` first downloads the six
+originals into `tests/originals/` (gitignored in a checkout). The test skips
+rather than fails when they are absent, so a run without network access to
+GitHub is not blocked.
 
 ## Coverage
 

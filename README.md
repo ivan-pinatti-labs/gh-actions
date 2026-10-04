@@ -75,9 +75,10 @@ lane. The configuration file is deliberately not in its own `allowed_paths`.
 
 ## Contributing
 
-Nothing runs on the host. In a
+Nothing runs on the host. `make test` runs the suite in the pinned Python
+image and needs only Podman. In a
 [devcontainer-airlock](https://github.com/ivan-pinatti-labs/devcontainer-airlock)
-workbench, `make test` runs the equivalence suite in L2, `make claude` and
+workbench it reaches the L2 engine by itself, `make claude` and
 `make codex` start the workbenches, and `make unlock` unlocks the ssh key; see
 [.devcontainer/README.md](.devcontainer/README.md).
 
