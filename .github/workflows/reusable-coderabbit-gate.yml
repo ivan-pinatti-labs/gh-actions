@@ -469,13 +469,22 @@ jobs:
 
       # PyYAML for pin_only.py, from the library's own lock at the same commit
       # as the library: hashes required and wheels only, so no package's setup
-      # script runs in a job holding `statuses: write`.
+      # script runs in a job holding `statuses: write`. A library ref older
+      # than the lock (this repository's own merge_group run, which reads the
+      # library from the default branch, the one time the lock is being added)
+      # has nothing to install; pin_only.py imports PyYAML only when it reads
+      # a configuration file, so that run grades without it.
       - name: Install the library's dependencies
         shell: bash
-        run: >-
-          python3 -m pip install --disable-pip-version-check
-          --require-hashes --only-binary=:all:
-          --requirement .gh-actions-library/src/requirements.txt
+        run: |
+          set -euo pipefail
+          lock=.gh-actions-library/src/requirements.txt
+          if [ ! -f "$lock" ]; then
+            echo "::notice::The library at this ref has no $lock yet; nothing to install."
+            exit 0
+          fi
+          python3 -m pip install --disable-pip-version-check \
+            --require-hashes --only-binary=:all: --requirement "$lock"
 
       - name: Read the pull request's metadata
         id: pr
