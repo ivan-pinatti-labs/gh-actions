@@ -15,7 +15,7 @@
 # pytest-cov is needed because pytest.ini's addopts passes --cov, and it
 # writes the report SonarQube Cloud reads; coverage is what measures. pyyaml
 # is imported by the suite and by src/pin_only.py.
-coverage==7.16.1
+coverage==7.16.2
 pytest==9.1.1
 pytest-cov==7.1.0
 pyyaml==6.0.3
