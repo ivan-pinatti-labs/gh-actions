@@ -179,3 +179,15 @@ def test_discovery_refuses_unsafe_script_names():
     # awk reads an operand like `shell=tool.sh` as a variable assignment, so
     # every path reaches it as `./path` and is printed without that prefix.
     assert 'printf "./%s\\0"' in text
+
+
+def test_the_coverage_hook_fires_for_every_discovered_script():
+    """The pre-push coverage hook selects files by name, so a script found only
+    by its shebang would slip past it. Fail until its `files:` pattern is widened
+    to cover every script the Makefile measures."""
+    config = (ROOT / ".pre-commit-config.yaml").read_text()
+    hook = re.search(r"- id: coverage\n(?:\s+\w.*\n)*?\s+files: '([^']+)'", config)
+    assert hook, "the coverage hook no longer selects files with a quoted pattern"
+    pattern = re.compile(hook.group(1))
+    missed = sorted(p for p in discovered() if not pattern.search(p))
+    assert not missed, f"the coverage hook would not run for {missed}"
