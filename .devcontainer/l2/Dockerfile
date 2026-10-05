@@ -1,18 +1,10 @@
-# This repository's L2 image: where its hooks and its test suite run, with no
-# network and no credentials (see docs/LAYERS.md in devcontainer-airlock).
-# pytest, pytest-cov and PyYAML are what the equivalence tests need; the
-# fixtures they compare against are public files that
-# tools/fetch-originals.sh downloads without a token, so `make test` runs the
-# whole thing in L2 with `l2 --net`.
+# This repository's L2 image: where its hooks run, with no network and no
+# credentials (see docs/LAYERS.md in devcontainer-airlock). The test suite
+# does not run here: `make test` runs it in the pinned Python image, through
+# the L2 engine, so this image carries nothing for it.
 ARG L2_IMAGE=ghcr.io/ivan-pinatti-labs/airlock-l2@sha256:f94ef8bfa6bebecb5cbe265e431d9bef64493e8590c5f00ffdd9767283cfe15b
 # hadolint ignore=DL3006
 FROM ${L2_IMAGE}
-USER 0:0
-# hadolint ignore=DL3008
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    python3-pytest \
-    python3-pytest-cov \
-    python3-yaml \
-  && rm -rf /var/lib/apt/lists/*
+# The base image already ends as the unprivileged workbench user; say so here
+# too, so this image never silently runs as root if the base changes.
 USER 1000:1000

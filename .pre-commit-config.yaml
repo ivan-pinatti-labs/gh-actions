@@ -138,11 +138,12 @@ repos:
         stages: [pre-commit]
 
       # shellcheck --severity=error, shfmt --indent 2 --write and the two
-      # shebang checks, over tools/fetch-originals.sh and its test.
+      # shebang checks, over every shell script and its test.
       # types: [shell] rather than a files: pattern, so a script is reached
-      # by its shebang as well as by its extension. tests/test_shell_scripts.py
-      # holds every script outside tests/ to the Makefile's SHELL_SCRIPTS, so
-      # one that is linted here is also measured by `make coverage`.
+      # by its shebang as well as by its extension. The Makefile's
+      # SHELL_SCRIPTS discovers every script outside tests/ by the same two
+      # signs (tests/test_shell_scripts.py keeps it that way), so one that is
+      # linted here is also measured by `make coverage`.
       - id: checklist-dev-shell
         types: [shell]
         stages: [pre-commit]
@@ -241,5 +242,5 @@ repos:
         language: system
         entry: make coverage
         pass_filenames: false
-        files: '(\.py$|\.sh$|^\.coveragerc$|^pytest\.ini$|^Makefile$|requirements\.txt$)'
+        files: '(\.py$|\.(sh|bash)$|^\.coveragerc$|^pytest\.ini$|^Makefile$|requirements\.txt$)'
         stages: [pre-push]

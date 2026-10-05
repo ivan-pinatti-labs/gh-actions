@@ -5,7 +5,7 @@
 # one line. Splitting one across lines leaves the trailing targets invisible
 # to it, and the phonydeclared and minphony rules then report them as
 # undeclared. Tracked upstream as checkmake#280.
-.PHONY: all help test coverage workbench-help
+.PHONY: all help test coverage print-shell-scripts workbench-help
 
 # Bare `make` shows the target list rather than doing something surprising.
 # checkmake's minphony rule also wants `all` declared phony; see checkmake.ini.
@@ -18,30 +18,15 @@ help:
 		'' \
 		'Targets:' \
 		'  help                        Show this message.' \
-		'  test                        Fetch the originals and run the equivalence suite, in L2.' \
+		'  test                        The test suite, in the pinned Python image (podman).' \
 		'  coverage                    Python and shell coverage in containers, 100% or fail.' \
 		''
 	@$(MAKE) --no-print-directory workbench-help
 
-# The test suite, in L2 rather than in the workbench: `l2 --net` gives it the
-# working tree and a way out through the egress proxy, for the originals the
-# equivalence tests compare against (public files on GitHub, fetched without
-# a token), and nothing else. Outside a workbench there is no l2, and the
-# same commands run as they are.
-#
-# `;` rather than `&&` after the fetch on purpose. The equivalence tests skip
-# when the originals are absent, so a developer with no network still gets the
-# rest of the suite. CI keeps the fetch as its own step, where a failure is
-# loud, because there a skipped comparison is exactly what must not pass
-# silently.
-L2_NET := $(if $(shell command -v l2 2>/dev/null),l2 --net --,)
-test:
-	@$(L2_NET) bash -c 'tools/fetch-originals.sh; python3 -m pytest tests/ -v'
-
 # Coverage of everything this repository writes, held at 100%: the Python
 # under src/ and tools/ (lines and branches, .coveragerc) under coverage.py,
-# and tools/fetch-originals.sh (lines; kcov reports no branches for bash)
-# under kcov, with curl replaced by a stub. Writes the two reports SonarQube
+# and every shell script, $(SHELL_SCRIPTS) below (lines; kcov reports no
+# branches for bash), under kcov, with curl replaced by a stub. Writes the two reports SonarQube
 # Cloud reads, $(COVERAGE_DIR)/coverage.xml and $(COVERAGE_DIR)/shell.xml, and
 # fails if either language is under 100%. .github/workflows/sonarqube.yml
 # runs this, and so does the `coverage` pre-push hook. The bash inline in the
@@ -72,10 +57,30 @@ test:
 COVERAGE_DIR ?= coverage
 PODMAN ?= $(if $(CONTAINER_HOST),podman-remote,podman)
 # renovate: datasource=docker depName=docker.io/library/python
-PYTHON_IMAGE ?= docker.io/library/python:3.12-trixie@sha256:4d1caded1f729ae443eb803f26ffde7b61e696aeaef62f099abb6dd6b14257c7
+PYTHON_IMAGE ?= docker.io/library/python:3.14-trixie@sha256:d0ef532dea88a06a0f950a40f95c553086c1f282bf8e313d328f11d289f72582
 # renovate: datasource=docker depName=docker.io/kcov/kcov
 KCOV_IMAGE ?= docker.io/kcov/kcov:latest@sha256:481289ae32e55e5b733019515acd10948a4f76dfed381765577db909664fc603
-SHELL_SCRIPTS := tools/fetch-originals.sh
+# The shell scripts kcov measures, found rather than listed, so a new one
+# cannot go unmeasured: every file git would commit that ends in .sh or .bash
+# or whose first line is a shebang running sh, bash or dash, minus tests/
+# (the tests, not the code under test) and SHELL_EXCLUDE, plus SHELL_EXTRA.
+# Only regular files reach awk: a path deleted in the working tree (or a
+# dangling link) is dropped first, since some awk builds stop at the first
+# file they cannot open. tests/test_shell_scripts.py checks the same
+# rule over the tree and that this discovery is still here.
+#
+# SHELL_EXCLUDE: vendored or third party shell, each with the reason. None.
+SHELL_EXCLUDE :=
+# SHELL_EXTRA: shell that neither its name nor a shebang identifies. None.
+SHELL_EXTRA :=
+# A script name outside [A-Za-z0-9._/+-] would reach the recipes as shell text
+# (a committed `x;id;#.sh` would run `id`), so discovery marks it UNSAFE: and
+# make stops here instead.
+_shell_safe = $(if $(filter UNSAFE:,$(1)),$(error a shell script name holds a character outside A-Za-z0-9._/+-; rename it),$(1))
+SHELL_SCRIPTS := $(call _shell_safe,$(sort $(filter-out $(SHELL_EXCLUDE),$(shell git ls-files -z --cached --others --exclude-standard | xargs -0 sh -c 'for f do if [ -f "$$f" ]; then printf "./%s\0" "$$f"; fi; done' sh | xargs -0 awk 'FNR == 1 { if (FILENAME ~ /^\.\/tests\//) { nextfile } if (FILENAME ~ /\.(sh|bash)$$/ || $$0 ~ /^#![[:space:]]*([^[:space:]]*\/)?(env[[:space:]]+(-[^[:space:]]+[[:space:]]+)*)?(ba|da)?sh([[:space:]]|$$)/) print (FILENAME ~ /^[A-Za-z0-9._\/+-]+$$/ ? substr(FILENAME, 3) : "UNSAFE:"); nextfile }' 2>/dev/null | grep -v '^tests/')) $(SHELL_EXTRA)))
+_comma := ,
+_empty :=
+_space := $(_empty) $(_empty)
 
 # Builds $$out/src.tar: the files git would commit (tracked, plus new ones
 # not ignored), minus any deleted in the working tree, each step checked,
@@ -87,6 +92,39 @@ _sources := git ls-files -z --cached --others --exclude-standard --deduplicate \
 	tar --create --owner=0 --group=0 --numeric-owner --null --files-from="$$out/list" --file="$$out/src.tar" || exit 1
 _unpack := set -e; mkdir /tmp/w; tar -x --no-same-owner -C /tmp/w; cd /tmp/w
 _locked := --cap-drop=ALL --security-opt no-new-privileges
+
+# The test suite, in the same pinned Python image `make coverage` uses
+# (PYTHON_IMAGE below), never on the host's Python, so the suite runs on one
+# Python version everywhere. The container gets the files git would commit as
+# a tar stream on standard input and nothing else: no mount, no home
+# directory, no SSH agent, no token, no environment variable, every
+# capability dropped. It installs tests/requirements.txt, hash locked, and
+# fetches the originals the equivalence tests compare against (public files
+# on GitHub, fetched without a token), so it has the network.
+#
+# A failed fetch is reported and the suite runs anyway, on purpose. The
+# equivalence tests skip when the originals are absent, so a developer with no
+# network for GitHub still gets the rest of the suite. CI keeps the fetch as its own step, where
+# a failure is loud, because there a skipped comparison is exactly what must
+# not pass silently.
+#
+# In a devcontainer-airlock workbench there is no engine of its own, so this
+# runs itself again through `l2 --engine --net`, which gives it the L2 engine
+# and the egress proxy. Inside that run CONTAINER_HOST is set and the
+# container starts directly. Only podman is needed on the host.
+L2 := $(shell command -v l2 2>/dev/null)
+test:
+	@if [ -n "$(L2)" ] && [ -z "$${CONTAINER_HOST:-}" ]; then \
+		exec l2 --engine --net -- $(MAKE) --no-print-directory test; \
+	fi; \
+	set -u; out="$$(mktemp -d)"; trap 'rm -rf "$$out"' EXIT; \
+	$(_sources); \
+	$(PODMAN) run <"$$out/src.tar" --rm --interactive $(_locked) \
+		"$(PYTHON_IMAGE)" sh -c '$(_unpack); \
+			pip install --quiet --disable-pip-version-check --root-user-action=ignore \
+				--require-hashes --only-binary=:all: -r tests/requirements.txt; \
+			tools/fetch-originals.sh || echo "fetch failed, so the equivalence tests skip" >&2; \
+			python3 -m pytest tests/ -v'
 
 coverage:
 	@set -u; out="$$(mktemp -d)"; trap 'rm -rf "$$out"' EXIT; \
@@ -101,7 +139,7 @@ coverage:
 	$(PODMAN) run <"$$out/src.tar" --rm --interactive $(_locked) \
 		--network=none --read-only --tmpfs /tmp \
 		-v "$$out/shell:/out:rw,Z" "$(KCOV_IMAGE)" sh -c '$(_unpack); \
-			kcov --include-path=$(addprefix /tmp/w/,$(SHELL_SCRIPTS)) /out/kcov \
+			kcov --include-path=$(subst $(_space),$(_comma),$(addprefix /tmp/w/,$(SHELL_SCRIPTS))) /out/kcov \
 				tests/fetch-originals.test.sh; \
 			python3 tools/kcov_to_sonar.py /tmp/w /out/kcov/fetch-originals.test.sh.*/cobertura.xml \
 				/out/shell.xml $(SHELL_SCRIPTS)' || sh=$$?; \
@@ -111,6 +149,10 @@ coverage:
 	done; \
 	test "$$py" -eq 0 && test "$$sh" -eq 0 && \
 		test -s "$(COVERAGE_DIR)/coverage.xml" && test -s "$(COVERAGE_DIR)/shell.xml"
+
+# The shell scripts `make coverage` measures, one per line.
+print-shell-scripts:
+	@printf '%s\n' $(SHELL_SCRIPTS)
 
 # The workbench targets (make claude, make codex, make unlock and the rest)
 # come from a devcontainer-airlock clone, by default the one next to this

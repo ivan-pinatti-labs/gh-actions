@@ -1,0 +1,12 @@
+# What the library needs at run time, exact pins rather than `>=` floors.
+# src/requirements.txt is compiled from this file with hashes and installed
+# with --require-hashes and wheels only by the `grade` job in
+# .github/workflows/reusable-coderabbit-gate.yml, into the interpreter
+# actions/setup-python gives it, before pin_only.py runs in a consumer's CI.
+# Regenerate it with the command in its header, never by hand; Renovate's
+# pip-compile manager bumps a pin here and replays that command.
+#
+# pyyaml reads a consumer's .github/pin-only.yml. The runner's own python3
+# carries it as python3-yaml, but that interpreter is whatever Python the
+# runner image ships, not the one this library is written and linted for.
+pyyaml==6.0.3

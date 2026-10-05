@@ -458,6 +458,34 @@ jobs:
           path: .gh-actions-library
           persist-credentials: false
 
+      # The interpreter that runs the library in every consumer, so it is the
+      # one ruff.toml targets and the Tests job runs, not whichever Python the
+      # runner image happens to ship. tests/test_python_version_pin.py holds
+      # this value to the others.
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # PyYAML for pin_only.py, from the library's own lock at the same commit
+      # as the library: hashes required and wheels only, so no package's setup
+      # script runs in a job holding `statuses: write`. A library ref older
+      # than the lock (this repository's own merge_group run, which reads the
+      # library from the default branch, the one time the lock is being added)
+      # has nothing to install; pin_only.py imports PyYAML only when it reads
+      # a configuration file, so that run grades without it.
+      - name: Install the library's dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock=.gh-actions-library/src/requirements.txt
+          if [ ! -f "$lock" ]; then
+            echo "::notice::The library at this ref has no $lock yet; nothing to install."
+            exit 0
+          fi
+          python3 -m pip install --disable-pip-version-check \
+            --require-hashes --only-binary=:all: --requirement "$lock"
+
       - name: Read the pull request's metadata
         id: pr
         env:

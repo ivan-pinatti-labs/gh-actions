@@ -60,14 +60,15 @@ analyzes the result. A fork's pull request fails the job with an explanation,
 since GitHub withholds `SONAR_TOKEN` from it; a maintainer pushes the
 contributor's commits to a branch here and opens a pull request from that.
 
-The job also holds coverage at 100%, above the quality gate's fixed 80% on
-new code: `make coverage` measures the Python under `src/` and `tools/`
-(lines and branches, coverage.py) and `tools/fetch-originals.sh` (lines,
-kcov), each in a podman container, and the job fails after the scan if either
-falls short. The same target runs as a pre-push hook. The bash inline in the
-workflows under `.github/workflows/` is not measured by either tool and has
-no coverage figure: it only runs inside GitHub Actions. Keep logic out of
-those `run:` blocks where it can live in a tested script instead.
+The job also holds coverage at 100%, above the quality gate's fixed 80% on new
+code: `make coverage` measures the Python under `src/` and `tools/` (lines and
+branches, coverage.py) and every shell script outside `tests/`, found by the
+Makefile rather than listed (lines, kcov), each in a podman container, and the
+job fails after the scan if either falls short. The same target runs as a
+pre-push hook. The bash inline in the workflows under `.github/workflows/` is
+not measured by either tool and has no coverage figure: it only runs inside
+GitHub Actions. Keep logic out of those `run:` blocks where it can live in a
+tested script instead.
 
 ## A human pull request
 

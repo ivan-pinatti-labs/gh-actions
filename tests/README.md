@@ -11,18 +11,24 @@ So the test runs each original's `normalize()` and this library's against the
 same corpus, across every path and block scalar state that repository can see,
 and requires the answers to match exactly.
 
-Run `tools/fetch-originals.sh` first; it downloads the six originals into
-`tests/originals/`, which is gitignored. The test skips rather than fails when
-they are absent, so a fresh clone is not blocked on network access.
+Run the suite with `make test`. It runs in the pinned Python image
+`make coverage` uses, never on the host's Python, so it needs only Podman.
+In that container `tools/fetch-originals.sh` first downloads the six
+originals into `tests/originals/` (gitignored in a checkout). The test skips
+rather than fails when they are absent, so a run without network access to
+GitHub is not blocked.
 
 ## Coverage
 
 `make coverage` holds `src/` and `tools/` at 100% of lines and branches
-(`.coveragerc`) and `tools/fetch-originals.sh` at 100% of its lines. The
-shell script is tested by `fetch-originals.test.sh`, which runs it under kcov
-against a stub `curl`, so it never reaches the network. `test_shell_scripts.py`
-fails when a shell script outside `tests/` is missing from the Makefile's
-`SHELL_SCRIPTS`, so a new one cannot go unmeasured. `test_edges.py`
+(`.coveragerc`) and every shell script outside `tests/` at 100% of its
+lines. The Makefile's `SHELL_SCRIPTS` finds those scripts itself, by extension
+or shebang, so a new one cannot go unmeasured; today that is
+`tools/fetch-originals.sh`, tested by `fetch-originals.test.sh`, which runs it
+under kcov against a stub `curl`, so it never reaches the network.
+`test_shell_scripts.py` applies the same rule in Python, runs the Makefile's
+own discovery over sample files, and fails if the Makefile goes back to a
+hand list. `test_edges.py`
 covers the lines and branches the behaviour suites do not reach.
 
 ## What it caught on the first run

@@ -92,7 +92,9 @@
   // and `make coverage` install the test suite from, and regenerates the hash locked
   // tests/requirements.txt by replaying the uv command in its header. Its
   // `--exclude-newer=P7D` is a rolling window, so a replay never resolves a
-  // release younger than seven days, transitive ones included.
+  // release younger than seven days, transitive ones included. It covers
+  // src/requirements.in and its lock the same way, the library's run time
+  // dependencies the reusable gate installs in a consumer's CI.
   //
   // custom.regex watches the two container images the Makefile's `coverage`
   // target runs, by digest only; see customManagers at the end of this file.
@@ -227,7 +229,7 @@
     },
 
     // The github-actions manager extracts more than uses: pins by default:
-    // pull-request.yml's python-version: "3.12" passed to
+    // pull-request.yml's python-version: "3.14" passed to
     // actions/setup-python's with: (depType uses-with) is a shape
     // rsync-crypt's own PR #82 proved live there, proposing 3.13 to 3.14
     // with no way to ever merge it. Dependabot's github-actions ecosystem
@@ -248,7 +250,7 @@
       enabled: false,
     },
     // The two images `make coverage` runs in the Makefile move by digest
-    // only. A tag change is not a pin bump: python 3.12 is the interpreter
+    // only. A tag change is not a pin bump: python 3.14 is the interpreter
     // the tests and SonarQube's python version setting assume, and kcov
     // publishes nothing but `latest`.
     {

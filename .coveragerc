@@ -5,8 +5,8 @@
 # 100%, lines and branches both. SonarQube Cloud's Free plan quality gate is
 # fixed at 80% on new code and cannot be raised, so this is what holds the
 # higher bar. Branches too, so every `if` has been seen going both ways, not
-# only reached. tools/fetch-originals.sh is held to 100% of its lines by kcov,
-# see tools/kcov_to_sonar.py. The bash inline in the workflows under
+# only reached. Every shell script outside tests/, which the Makefile finds
+# itself, is held to 100% of its lines by kcov, see tools/kcov_to_sonar.py. The bash inline in the workflows under
 # .github/workflows/ is not measured by either: no tool can run it outside
 # GitHub Actions.
 [run]

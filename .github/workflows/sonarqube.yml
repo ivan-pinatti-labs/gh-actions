@@ -81,7 +81,8 @@ jobs:
 
       # Coverage of the Python and the shell, held at 100% (see the
       # Makefile's `coverage` target): src/ and tools/ under coverage.py,
-      # lines and branches, and tools/fetch-originals.sh under kcov, lines.
+      # lines and branches, and every shell script outside tests/ (found by
+      # the Makefile) under kcov, lines.
       # The quality gate also requires 80% on new code, and with no report
       # every new line would count as uncovered. Both tools run in podman
       # containers that see the source only through a tar stream; the runner

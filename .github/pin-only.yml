@@ -11,6 +11,8 @@ allowed_paths:
   - .devcontainer/l2/Dockerfile
   - tests/requirements.in
   - tests/requirements.txt
+  - src/requirements.in
+  - src/requirements.txt
   - Makefile
 
 rules:
@@ -19,6 +21,12 @@ rules:
   # The hash lock compiled from it, graded as a whole: same packages, only
   # versions and hashes moved, every new hash one PyPI publishes.
   - path: tests/requirements.txt
+    grammars: [hash_locked_requirements]
+  # The same pair for the library's run time dependencies, which the gate
+  # installs before running the library in a consumer's CI.
+  - path: src/requirements.in
+    grammars: [requirement_line]
+  - path: src/requirements.txt
     grammars: [hash_locked_requirements]
   - path: .devcontainer/l2/Dockerfile
     grammars: [image_digest]
