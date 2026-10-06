@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.json
 #
-# Generic starting point for a repo created from this template, aligned with
+# gh-actions' CodeRabbit settings, from github-template, aligned with
 # the org-wide merge pipeline documented in docs/MERGE_PIPELINE.md: this
 # repo's own `Review Verified` context depends on both settings below being
 # exactly what they say. Tune the tools block once you know what pre-commit
@@ -41,3 +41,121 @@ reviews:
   #     enabled: false
   #   markdownlint:
   #     enabled: false
+
+  # How hard to look. assertive raises more than chill does; this
+  # repository grades what seven others may merge unattended, so a missed
+  # edge case costs more than an extra comment.
+  profile: assertive
+
+  # Review guidance. The first two entries are the organization's
+  # public-repository rules, kept the same in every ivan-pinatti-labs
+  # repository; the rest are specific to gh-actions. Pre-commit already runs
+  # the linters, so these ask for judgment the hooks cannot make.
+  path_instructions:
+    - path: "**"
+      instructions: |
+        This repository is public. Flag, as a blocking issue, anything in the
+        diff that should not be published:
+        - secrets, tokens, keys, passwords, session cookies, connection
+          strings, or anything that looks like one, even in tests or docs;
+        - personal data: names other than the maintainer's public handle,
+          email addresses other than a users.noreply.github.com one, phone
+          numbers, physical addresses;
+        - machine specific details: absolute home paths (/home/<user>,
+          /Users/<user>), host names, LAN or private IP addresses, internal
+          domains, cloud account IDs, ARNs, AWS profile names, cluster
+          contexts, and details of anyone's own deployment;
+        - AI attribution in any file, commit message or the pull request
+          text: a Co-Authored-By trailer naming an AI agent, a "Generated
+          with" line, an agent session link, or any other line that names
+          or links the agent that wrote the change.
+        Also check that every behavior change comes with tests that would
+        fail without it, and that the docs describe the new behavior. The
+        organization's rule is 100% test coverage of the code it ships:
+        flag, as a blocking issue, any new or changed line or branch of code
+        (not docs or configuration) that no test exercises, and name the
+        test that would cover it. Do not comment on formatting the
+        pre-commit hooks already enforce.
+    - path: "**/*.md"
+      instructions: |
+        Prose does not use a hyphen, em dash or en dash as punctuation; use
+        commas, parentheses or separate sentences (hyphens inside compound
+        words, code, paths and flags are fine). Point out claims the code in
+        this pull request does not back up.
+    - path: "{src,pin-only,review-verdict}/**"
+      instructions: |
+        This code decides what seven repositories merge with nobody reading
+        the diff, so it must fail closed. Flag any path where an error, an
+        unknown grammar name, a missing allowed_paths, an unexpected
+        CodeRabbit description or an unparsed line ends in success instead
+        of a refusal (docs/CONFIGURATION.md, "Failure modes, deliberately
+        loud"; Review Verified is success only for the literal "Review
+        completed"). Flag a grammar change without a matching and a
+        non-matching line in tests/test_equivalence.py, and any change that
+        merges two grammars because they look alike (AGENTS.md,
+        docs/GRAMMARS.md).
+    - path: ".github/workflows/reusable-*.yml"
+      instructions: |
+        Consumers pin these by SHA. Flag a relative `uses: ./` or any other
+        way the library could be read from the caller's checkout instead of
+        through job.workflow_sha, and any configuration, input or script
+        read from the pull request being graded rather than from the
+        default branch: a bot must not be able to widen its own lane.
+    - path: "examples/**"
+      instructions: |
+        Each file reproduces one consumer's previous script exactly and the
+        equivalence suite compares against it. Flag any edit here that is
+        not a deliberate change of that consumer's expected behavior, since
+        it silently changes what tests/test_equivalence.py proves.
+    - path: ".github/pin-only.yml"
+      instructions: |
+        This file must never appear in its own allowed_paths: a bump that
+        edits it has to wait for a person (docs/CONFIGURATION.md). Flag any
+        widening of allowed_paths or of a path's grammars that the pull
+        request does not justify.
+
+  # Pull request checks shown in the walkthrough. Warnings, not errors: the
+  # merge pipeline already gates on CodeRabbit's review through Review
+  # Verified (docs/MERGE_PIPELINE.md).
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: >-
+        Conventional Commits: type(optional scope): imperative subject,
+        lowercase, no trailing period, at most 72 characters.
+    description:
+      mode: warning
+    custom_checks:
+      - name: Public repository hygiene
+        mode: warning
+        instructions: >-
+          Fail if the diff, commit messages or pull request text add a secret
+          or something that looks like one, an email address other than a
+          users.noreply.github.com one, an absolute home path, a private or
+          machine specific host name, a private IP address, a cloud account ID
+          or ARN, or details of a personal deployment. Pass otherwise.
+      - name: No AI attribution
+        mode: warning
+        instructions: >-
+          Fail if any commit message, the pull request title or description,
+          or any file in the diff contains a Co-Authored-By trailer naming an
+          AI agent, a "Generated with" line, an agent session link, or any
+          other line that names or links the AI agent that made the change.
+          Pass otherwise.
+
+# Tone of review comments and chat.
+tone_instructions: >-
+  Direct and specific: lead with the defect and a concrete fix, in plain
+  words. No praise, no emoji, no hype. Skip style points a linter already
+  reports.
+
+# The repository's own rules, read as coding guidelines for every review.
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - AGENTS.md
+      # Guidelines outside the root apply only to their own folder unless
+      # applyTo widens them, and these govern the whole repository.
+      - files: "docs/CONFIGURATION.md,docs/GRAMMARS.md,docs/MERGE_PIPELINE.md"
+        applyTo: "**/*"
