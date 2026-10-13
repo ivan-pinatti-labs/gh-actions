@@ -60,6 +60,7 @@ LINES = [
     "ARG CLAUDE_CODE_VERSION=2.1.269",
     "ARG NOT_ANNOTATED=2.1.269",
     "ARG ALPINE_VERSION=3.22.1",
+    "ARG AGENT_POLICY_REF=v0.6.12@" + "e" * 40,
     "pytest==8.3.4",
     "pytest[extra]==8.4.0",
     "not-a-requirement",
