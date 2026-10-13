@@ -210,6 +210,17 @@ ARG_PIN = re.compile(
     r"^(?P<prefix>ARG[ \t]+(?P<name>[A-Z][A-Z0-9_]*)=)" + RELEASE + r"[ \t]*$"
 )
 
+# A release pinned together with the commit it must resolve to, the way a
+# build that clones a tag and refuses one that moved is pinned:
+# `ARG AGENT_POLICY_REF=v0.6.12@<40 hex>`. Both halves are replaced by their
+# own placeholders, so dropping the commit, adding one, or putting anything
+# but a release and a full commit in either half is a structural change.
+ARG_TAG_COMMIT = re.compile(
+    r"^(?P<prefix>ARG[ \t]+(?P<name>[A-Z][A-Z0-9_]*)=)"
+    + RELEASE
+    + r"@[0-9a-f]{40}[ \t]*$"
+)
+
 # A bare digest anywhere in the line.
 DIGEST = re.compile(r"@sha256:[0-9a-f]{7,}")
 
@@ -480,6 +491,14 @@ GRAMMARS: dict[str, object] = {
     # comparing its lines.
     HASH_LOCKED: lambda line, cfg: line,
     "annotated_arg": lambda line, cfg: _normalize_annotated_arg(line, cfg),
+    "arg_tag_commit": lambda line, cfg: ARG_TAG_COMMIT.sub(
+        lambda m: (
+            f"{m.group('prefix')}<version>@<commit>"
+            if m.group("name") in _eligible_arg_names(cfg)
+            else m.group(0)
+        ),
+        line,
+    ),
     "arg_pin": lambda line, cfg: ARG_PIN.sub(
         lambda m: (
             f"{m.group('prefix')}<version>"
