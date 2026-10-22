@@ -48,7 +48,16 @@ def _git(repo: Path, *args: str) -> str:
     # S603/S607: git from PATH, with arguments written here, in a throwaway
     # repository pytest created.
     return subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@users.noreply.github.com",
+            *args,
+        ],
         capture_output=True,
         text=True,
         check=True,

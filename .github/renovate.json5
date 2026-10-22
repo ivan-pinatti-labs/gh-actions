@@ -282,7 +282,7 @@
       automerge: true,
       addLabels: ["automerge"],
     },
-    // Renovate's weekly refresh of the hash locked tests/requirements.txt
+    // Renovate's weekly refresh of the hash locked requirements files
     // ("Refresh pip-compile outputs") merges unattended as well. It is its
     // own update type, lockFileMaintenance, which no grant above matches.
     // The lock's own `--exclude-newer=P7D` keeps every release it resolves
