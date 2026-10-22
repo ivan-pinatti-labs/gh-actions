@@ -221,6 +221,20 @@ ARG_TAG_COMMIT = re.compile(
     + r"@[0-9a-f]{40}[ \t]*$"
 )
 
+# A shell assignment of a container image pinned by tag and digest together,
+# `NAME=registry/name:tag@sha256:<64 hex>`, bare or in double quotes, whose
+# name an annotation above it made eligible: the scanner and tool images a
+# script runs, which Renovate's regex managers bump in place. The name, the
+# image and the quoting are kept, so a renamed variable, another image or a
+# quote added or dropped is a structural change; the tag and the digest are
+# replaced by one placeholder, since both move on a bump. Nothing but the
+# assignment may sit on the line, so no command, expansion or second
+# statement can ride along with one.
+SHELL_IMAGE_PIN = re.compile(
+    r'^(?P<prefix>(?P<name>[A-Z][A-Z0-9_]*)=(?P<quote>"?)[A-Za-z0-9._/-]+:)'
+    r"[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}(?P=quote)[ \t]*$"
+)
+
 # A bare digest anywhere in the line.
 DIGEST = re.compile(r"@sha256:[0-9a-f]{7,}")
 
@@ -242,6 +256,8 @@ VERSION = re.compile(
 
 # `ARG NAME=` lines, and the annotation comment that can precede one.
 ARG_LINE = re.compile(r"^ARG (?P<name>[A-Z0-9_]+)=(?P<value>\S*)$")
+# A shell `NAME=` assignment, the other line an annotation can make eligible.
+ASSIGNMENT_LINE = re.compile(r"^(?P<name>[A-Z][A-Z0-9_]*)=")
 ARG_VALUE = re.compile(r"(?P<prefix>^ARG [A-Z0-9_]+=)\S*$")
 
 
@@ -370,8 +386,12 @@ def _ordinal(n: int) -> str:
     return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }".replace(" ", "")
 
 
-def _annotated_arg_names(path: Path, annotation: re.Pattern[str]) -> frozenset[str]:
-    """Read the ARG names an annotation comment makes eligible in one file.
+def _annotated_arg_names(
+    path: Path, annotation: re.Pattern[str], line_pattern: re.Pattern[str] = ARG_LINE
+) -> frozenset[str]:
+    """Read the names an annotation comment makes eligible in one file.
+
+    `ARG NAME=` lines by default; `ASSIGNMENT_LINE` reads shell `NAME=` ones.
 
     Read from the file rather than from the diff on purpose. The workflow that
     runs this checks out the default branch, so these names come from the
@@ -387,7 +407,7 @@ def _annotated_arg_names(path: Path, annotation: re.Pattern[str]) -> frozenset[s
         if annotation.match(line.strip()):
             annotated = True
             continue
-        arg = ARG_LINE.match(line)
+        arg = line_pattern.match(line)
         if arg and annotated:
             names.add(arg.group("name"))
         annotated = False
@@ -507,6 +527,14 @@ GRAMMARS: dict[str, object] = {
         ),
         line,
     ),
+    "shell_image_pin": lambda line, cfg: SHELL_IMAGE_PIN.sub(
+        lambda m: (
+            f"{m.group('prefix')}<version>{m.group('quote')}"
+            if m.group("name") in _eligible_arg_names(cfg, ASSIGNMENT_LINE)
+            else m.group(0)
+        ),
+        line,
+    ),
 }
 
 
@@ -542,13 +570,20 @@ def _strip_bare_action_version(match: re.Match[str]) -> str:
     return f"{match.group('action_prefix')} # <version>"
 
 
-def _eligible_arg_names(cfg: Config) -> frozenset[str]:
-    """Every ARG name an annotation makes pin eligible, across all sources."""
+def _eligible_arg_names(
+    cfg: Config, line_pattern: re.Pattern[str] = ARG_LINE
+) -> frozenset[str]:
+    """Every name an annotation makes pin eligible, across all sources.
+
+    ARG names by default, shell assignment names with `ASSIGNMENT_LINE`. The
+    two are read apart, so annotating a script cannot make an ARG of the same
+    name eligible, or the other way round.
+    """
     eligible: set[str] = set()
     for source in cfg.arg_sources:
         for annotation in source.annotations:
             eligible |= _annotated_arg_names(
-                cfg.repo_root / source.file, re.compile(annotation)
+                cfg.repo_root / source.file, re.compile(annotation), line_pattern
             )
     return frozenset(eligible)
 
