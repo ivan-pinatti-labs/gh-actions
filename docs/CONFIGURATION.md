@@ -65,8 +65,10 @@ rules:
     raw: true
 
 # Files whose annotated `ARG` names become pin eligible, for the
-# `annotated_arg` and `arg_pin` grammars. Read from the checkout, so a pull
-# request cannot introduce its own annotation and be graded against it.
+# `annotated_arg`, `arg_pin` and `arg_tag_commit` grammars, and whose
+# annotated shell `NAME=` assignments do, for `shell_image_pin`. Read from the
+# checkout, so a pull request cannot introduce its own annotation and be
+# graded against it.
 arg_sources:
   - file: Dockerfile
     annotations:

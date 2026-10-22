@@ -24,6 +24,7 @@ caught by the line comparison, not by the path.
 | `annotated_arg` | `ARG NAME=1.2.3` where an annotation made `NAME` eligible | `ARG NAME=<version>` |
 | `arg_pin` | the same, with a stricter name and value pattern | `ARG NAME=<version>` |
 | `arg_tag_commit` | `ARG NAME=v1.2.3@<40 hex>`, a release with the commit it must resolve to, where an annotation made `NAME` eligible | `ARG NAME=<version>@<commit>` |
+| `shell_image_pin` | `NAME=img:tag@sha256:<64 hex>`, bare or double quoted, a shell assignment alone on its line, where an annotation made `NAME` eligible | `NAME=img:<version>`, name, image and quoting kept |
 | `version` | a version after `==`, `>=`, `rev:`, `VERSION=` or a bare `:` | that version only |
 
 ## The strip variants

@@ -128,18 +128,29 @@ a `GITHUB_TOKEN` creates).
 Dependabot and Renovate open pull requests unattended. For the ones that are
 pin only:
 
-1. **`Pin Only` is graded.** `scripts/assert-pin-only-diff.py` checks that
-   every changed line differs from its counterpart in nothing but a
-   version, in a pin position, across three allowed pin surfaces
-   (`.pre-commit-config.yaml`, `.github/workflows/`,
-   `.devcontainer/l2/Dockerfile`), and
-   `coderabbit-gate.yml` publishes its verdict as the `Pin Only` status. A
-   number that is not a pin does not count as one.
-2. **The approval is supplied, conditionally.** `bot-auto-merge.yml` waits
+1. **`Pin Only` is graded,** on the surfaces `.github/pin-only.yml` allows,
+   by the grammar its rule names for each path. On
+   `.pre-commit-config.yaml`, `.github/workflows/`,
+   `.devcontainer/l2/Dockerfile`, the Makefile's image digests and the
+   `requirements.in` files, `src/pin_only.py` checks that every changed line
+   differs from its counterpart in nothing but a version in a pin position;
+   a number that is not a pin does not count as one. The hash locked
+   `requirements.txt` files are graded whole instead: the same packages, no
+   change but versions, hashes and the indented `# via` comments, and every
+   new hash one PyPI publishes for that release. `coderabbit-gate.yml`
+   publishes the verdict as the `Pin Only` status.
+2. **Renovate asks for the merge by label.** Patch and minor bumps, the L2
+   image and Makefile image digests, and the weekly lock refresh
+   (lockFileMaintenance) carry the `automerge` label
+   (`.github/renovate.json5`); a major does not. A lock refresh needs no
+   reader because the lock's own `--exclude-newer=P7D` keeps everything it
+   resolves at least seven days old, and the hash lock grading refuses a
+   package added or removed.
+3. **The approval is supplied, conditionally.** `bot-auto-merge.yml` waits
    for `Pin Only` to read `success` and then supplies the approving review
    branch protection requires. A diff that is not pin-only gets no approval
    and waits for a person, same as a major bump does.
-3. **GitHub enqueues and merges it** once every required check, including
+4. **GitHub enqueues and merges it** once every required check, including
    `Review Verified`, is green and the approval is in place, the same as
    any other pull request.
 

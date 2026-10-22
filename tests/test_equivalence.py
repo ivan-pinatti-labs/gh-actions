@@ -68,6 +68,8 @@ LINES = [
     "          echo hello",
     "image: ghcr.io/example/app@sha256:" + "d" * 64,
     "SOME_VERSION=1.2.3",
+    "TRIVY_IMAGE=docker.io/aquasec/trivy:0.74.0@sha256:" + "f" * 64,
+    'NEXUS_IMAGE="docker.io/sonatype/nexus3:3.96.3@sha256:' + "f" * 64 + '"',
     "",
     "   ",
 ]
