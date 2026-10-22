@@ -128,15 +128,17 @@ a `GITHUB_TOKEN` creates).
 Dependabot and Renovate open pull requests unattended. For the ones that are
 pin only:
 
-1. **`Pin Only` is graded.** `src/pin_only.py` checks that every changed
-   line differs from its counterpart in nothing but a version, in a pin
-   position, on the surfaces `.github/pin-only.yml` allows:
+1. **`Pin Only` is graded,** on the surfaces `.github/pin-only.yml` allows,
+   by the grammar its rule names for each path. On
    `.pre-commit-config.yaml`, `.github/workflows/`,
-   `.devcontainer/l2/Dockerfile`, the Makefile's image digests, and the
-   requirements under `tests/` and `src/`, whose hash locks are graded
-   whole (same packages, and every new hash one PyPI publishes).
-   `coderabbit-gate.yml` publishes its verdict as the `Pin Only` status. A
-   number that is not a pin does not count as one.
+   `.devcontainer/l2/Dockerfile`, the Makefile's image digests and the
+   `requirements.in` files, `src/pin_only.py` checks that every changed line
+   differs from its counterpart in nothing but a version in a pin position;
+   a number that is not a pin does not count as one. The hash locked
+   `requirements.txt` files are graded whole instead: the same packages, no
+   change but versions, hashes and the indented `# via` comments, and every
+   new hash one PyPI publishes for that release. `coderabbit-gate.yml`
+   publishes the verdict as the `Pin Only` status.
 2. **Renovate asks for the merge by label.** Patch and minor bumps, the L2
    image and Makefile image digests, and the weekly lock refresh
    (lockFileMaintenance) carry the `automerge` label
