@@ -235,6 +235,16 @@ SHELL_IMAGE_PIN = re.compile(
     r"[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}(?P=quote)[ \t]*$"
 )
 
+# A VS Code extension pinned to an exact release, one per line, the way
+# `code --install-extension` takes it: `publisher.name@1.2.3`. The identifier
+# is kept, so another extension (or another publisher's copy of one) is a
+# structural change. The version is three dot separated numbers and nothing
+# else, the only shape the Marketplace publishes, so no suffix can ride along.
+VSCODE_EXTENSION_PIN = re.compile(
+    r"^(?P<prefix>[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9-]*@)"
+    r"[0-9]+\.[0-9]+\.[0-9]+[ \t]*$"
+)
+
 # A bare digest anywhere in the line.
 DIGEST = re.compile(r"@sha256:[0-9a-f]{7,}")
 
@@ -506,6 +516,9 @@ GRAMMARS: dict[str, object] = {
         r"\g<prefix><version>", line
     ),
     "version": lambda line, cfg: VERSION.sub(r"\g<prefix><version>", line),
+    "vscode_extension_pin": lambda line, cfg: VSCODE_EXTENSION_PIN.sub(
+        r"\g<prefix><version>", line
+    ),
     # File level, not line level: see `_hash_locked_problems`. Line by line it
     # changes nothing, and `main` grades a file under it as a whole instead of
     # comparing its lines.
