@@ -70,6 +70,8 @@ LINES = [
     "SOME_VERSION=1.2.3",
     "TRIVY_IMAGE=docker.io/aquasec/trivy:0.74.0@sha256:" + "f" * 64,
     'NEXUS_IMAGE="docker.io/sonatype/nexus3:3.96.3@sha256:' + "f" * 64 + '"',
+    "anthropic.claude-code@2.1.274",
+    "anthropic.claude-code@2.1.274-beta",
     "",
     "   ",
 ]
