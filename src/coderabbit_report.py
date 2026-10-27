@@ -65,9 +65,8 @@ def _check_run_description(run: dict) -> str:
         return title
     summary = str(output.get("summary") or "")
     match = RESULT_LINE.match(summary.split("\n", 1)[0].strip())
-    if not match:
-        return title
-    text = match.group(1).strip()
+    # An unreadable summary falls back to the title, under the same check.
+    text = match.group(1).strip() if match else title
     # The words and the outcome have to agree: a completed review that did
     # not conclude `success` is not one to pass on its words alone.
     if run.get("conclusion") != "success" and text == "Review completed":

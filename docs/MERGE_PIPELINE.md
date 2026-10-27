@@ -195,10 +195,11 @@ title while it runs and on the first line of its summary once it ends
 only a status whose creator is `coderabbitai[bot]` and a check run whose
 app is `coderabbitai`. Reading check runs needs no permission on a public
 repository (measured with a token holding only metadata), so the gate asks
-for none, and a consumer takes this with a plain pin bump. Its
-`coderabbit-gate.yml` then lists `check_run: types: [completed]` among its
-triggers, so a finished review re-grades at once rather than at the next
-event or sweep.
+for none, and a pin bump alone gives a consumer the new reading of
+CodeRabbit's reports. The bump does not add the `check_run` trigger, though:
+until a consumer adds `check_run: types: [completed]` to its own
+`coderabbit-gate.yml`, a finished review is graded at the next event or
+sweep rather than at once.
 
 ## Recovering a stuck `Review Verified`
 

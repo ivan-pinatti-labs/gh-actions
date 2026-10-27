@@ -273,6 +273,28 @@ def test_completed_words_without_a_success_conclusion_fail_closed(conclusion):
     assert verdict(text) == "failure"
 
 
+@pytest.mark.parametrize(
+    ("title", "conclusion", "text", "state"),
+    [
+        # No Result line: the title stands in, under the same conclusion check.
+        (
+            "Review completed",
+            "neutral",
+            "Review completed, concluded neutral",
+            "failure",
+        ),
+        ("Review completed", "success", "Review completed", "success"),
+        ("Review rate limited", "neutral", "Review rate limited", "failure"),
+    ],
+)
+def test_the_title_fallback_passes_the_conclusion_check(title, conclusion, text, state):
+    finished = run(
+        title, "no result line", "2026-10-27T05:00:00Z", conclusion=conclusion
+    )
+    assert description({"check_runs": [finished]}) == text
+    assert verdict(text) == state
+
+
 def test_on_a_tie_the_check_run_wins():
     at = "2026-10-27T05:00:00Z"
     data = {
