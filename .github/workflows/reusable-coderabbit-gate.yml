@@ -20,7 +20,7 @@ name: CodeRabbit Gate
 #                    lanes.
 #
 # Ported from rsync-crypt's workflow of the same name, ahead of ever needing
-# it here. Five triggers, and each one exists for a different failure mode of
+# it here. Six triggers, and each one exists for a different failure mode of
 # the others:
 #
 #   pull_request_target  the normal path, firing on the events that change
@@ -31,6 +31,13 @@ name: CodeRabbit Gate
 #                         the pull_request_target run already published
 #                         `pending` would sit there until something else woke
 #                         this workflow.
+#   check_run             the same fast path, for the way CodeRabbit reports
+#                         since late October 2026: a `CodeRabbit` check run,
+#                         with no status at all. A caller lists it as
+#                         `check_run: types: [completed]`; it needs no
+#                         permission beyond the others (see the grade job).
+#                         Until it does, a finished review is picked up by
+#                         the next event or sweep instead.
 #   schedule              the self-healing path, in principle: an hourly
 #                         re-grade is meant to recover a missed or failed run
 #                         without a person noticing first. In practice GitHub
@@ -119,7 +126,13 @@ jobs:
     # The event-shape filter lives here rather than being restated on every
     # trigger; `status` is the one that needs it, since it fires for reasons
     # that have nothing to do with CodeRabbit at all.
-    if: github.event_name != 'status' || github.event.context == 'CodeRabbit'
+    # `check_run` likewise, for every job of every workflow; only CodeRabbit's
+    # own run matters, told apart by its app, which no other app can carry.
+    if: >-
+      (github.event_name != 'status' || github.event.context == 'CodeRabbit')
+      && (github.event_name != 'check_run'
+          || (github.event.check_run.name == 'CodeRabbit'
+              && github.event.check_run.app.slug == 'coderabbitai'))
     permissions:
       pull-requests: read
     outputs:
@@ -140,6 +153,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           STATUS_SHA: ${{ github.event.sha }}
+          CHECK_RUN_SHA: ${{ github.event.check_run.head_sha }}
           MERGE_GROUP_REF: ${{ github.event.merge_group.head_ref }}
           MERGE_GROUP_SHA: ${{ github.event.merge_group.head_sha }}
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
@@ -253,17 +267,29 @@ jobs:
                 '[{pr_number: ($n | tonumber), head_sha: $s, target_sha: $s}]')
               ;;
 
-            status)
+            status|check_run)
               # Zero, one, or in principle more than one open pull request can
               # share a head SHA (a branch pushed to two pull requests at
               # once). Grading all of them is no more work than grading one.
+              # A CodeRabbit check run names the commit it reviewed as its
+              # head_sha, where a status names it as the event's sha.
               #
               # `gh api --jq` takes a single filter string; it has no `--arg`
               # of its own, so binding a shell variable into the filter needs
               # the standalone `jq` binary on the receiving end instead.
+              sha="$STATUS_SHA"
+              if [ "$EVENT_NAME" = check_run ]; then
+                sha="$CHECK_RUN_SHA"
+              fi
+              case "$sha" in
+                *[!0-9a-f]*|'')
+                  echo "::error::No commit to grade for this $EVENT_NAME event."
+                  exit 1
+                  ;;
+              esac
               # shellcheck disable=SC2016
-              matrix=$(gh api "repos/$REPO/commits/$STATUS_SHA/pulls" \
-                | jq -c --arg s "$STATUS_SHA" \
+              matrix=$(gh api "repos/$REPO/commits/$sha/pulls" \
+                | jq -c --arg s "$sha" \
                 '[.[] | select(.state == "open")
                   | {pr_number: .number, head_sha: $s, target_sha: $s}]')
               ;;
@@ -370,6 +396,12 @@ jobs:
     concurrency:
       group: coderabbit-gate-${{ matrix.entry.target_sha }}
       cancel-in-progress: true
+    # No `checks: read`, deliberately. CodeRabbit's check runs (see "Read
+    # CodeRabbit's latest report" below) are readable on a public repository
+    # with no permission at all, measured on 2026-10-27 with a token holding
+    # only metadata. Asking for it would make GitHub refuse to start this job
+    # for every caller that has not granted it, so a pin bump would stop the
+    # gate in every consumer until its own workflow changed.
     permissions:
       contents: read
       pull-requests: read
@@ -582,42 +614,46 @@ jobs:
             -f description="${DESCRIPTION:0:140}" \
             --silent
 
-      - name: Read CodeRabbit's latest status on the real head
+      - name: Read CodeRabbit's latest report on the real head
         id: coderabbit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ matrix.entry.head_sha }}
-        # The list endpoint, not the combined one: the combined
-        # `/commits/{sha}/status` collapses to the newest status per context
-        # but drops each one's `creator`, and the creator is what proves this
-        # status actually came from CodeRabbit rather than from anything else
-        # with `statuses: write` on this repository choosing to call itself
-        # `CodeRabbit`. `/statuses` keeps `creator`, unlike the combined
-        # endpoint, at the cost of returning every status ever posted to this
-        # commit rather than one per context, 30 to a page, newest first.
-        # `--paginate` walks every page before the filter runs, which matters
-        # here specifically: every push posts three CodeRabbit statuses of its
-        # own ("Review queued", "Review in progress", "Review completed"),
-        # so a handful of pushes is already enough to push a trusted status
-        # off page one and read as absent.
+        # CodeRabbit reports a review as a commit status, and since late
+        # October 2026 as a `CodeRabbit` check run instead, so both are read
+        # and src/coderabbit_report.py takes the newer, counting only reports
+        # CodeRabbit made (a status whose creator is coderabbitai[bot], a
+        # check run whose app is coderabbitai).
+        #
+        # Statuses through the list endpoint, not the combined one: the
+        # combined `/commits/{sha}/status` collapses to the newest status per
+        # context but drops each one's `creator`, and the creator is what
+        # proves a status actually came from CodeRabbit rather than from
+        # anything else with `statuses: write` on this repository choosing to
+        # call itself `CodeRabbit`. `/statuses` keeps it, at the cost of
+        # returning every status ever posted to this commit, 30 to a page.
+        # `--paginate` walks every page, which matters here specifically:
+        # every push used to post three CodeRabbit statuses of its own, so a
+        # handful of pushes was enough to push a trusted status off page one.
+        # Check runs are filtered to the name by the API and to the app by the
+        # library, and paginated for the same reason.
+        #
+        # The library flattens the description to one line before it reaches
+        # GITHUB_OUTPUT. A newline in a `key=value` line lets whatever follows
+        # it be parsed as another output, so an unsanitised description could
+        # set `state=success` on the very check meant to withhold it.
         shell: bash
         run: |
           set -euo pipefail
-          # `gsub` before the value ever reaches GITHUB_OUTPUT. A newline
-          # in a `key=value` line lets whatever follows it be parsed as
-          # another output, so an unsanitised description could set
-          # `state=success` on the very check meant to withhold it. Only
-          # CodeRabbit can write this status, per the creator filter, and its
-          # descriptions are a single line today; this is here because a gate
-          # whose whole purpose is refusing to take a status at face value
-          # should not then parse that status's text at face value either.
-          description=$(gh api --paginate "repos/$REPO/commits/$HEAD_SHA/statuses" \
-            | jq -sr '[.[][] | select(.context == "CodeRabbit"
-                          and .creator.login == "coderabbitai[bot]")]
-                  | first | .description // ""
-                  | gsub("[\\r\\n]"; " ")')
-          echo "description=$description" >> "$GITHUB_OUTPUT"
+          gh api --paginate "repos/$REPO/commits/$HEAD_SHA/statuses" \
+            | jq -s 'add // []' > "$RUNNER_TEMP/statuses.json"
+          runs="check-runs?check_name=CodeRabbit&filter=all&per_page=100"
+          gh api --paginate "repos/$REPO/commits/$HEAD_SHA/$runs" \
+            | jq -s '[.[].check_runs[]]' > "$RUNNER_TEMP/check-runs.json"
+          jq -s '{statuses: .[0], check_runs: .[1]}' \
+            "$RUNNER_TEMP/statuses.json" "$RUNNER_TEMP/check-runs.json" \
+            | python3 .gh-actions-library/src/coderabbit_report.py >> "$GITHUB_OUTPUT"
 
       - name: Decide Review Verified
         id: verdict

@@ -23,6 +23,7 @@ approves and merges it without a person.
 
 - [src/pin_only.py](src/pin_only.py): The pin-only diff engine, grammars and configuration
 - [src/review_verdict.py](src/review_verdict.py): The `Review Verified` decision
+- [src/coderabbit_report.py](src/coderabbit_report.py): CodeRabbit's newest report on a commit, from its statuses and check runs
 - [pin-only/action.yml](pin-only/action.yml): Composite action wrapping the pin-only check
 - [review-verdict/action.yml](review-verdict/action.yml): Composite action wrapping the verdict
 - [.github/workflows/reusable-coderabbit-gate.yml](.github/workflows/reusable-coderabbit-gate.yml): The gate, as a reusable workflow
