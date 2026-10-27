@@ -185,6 +185,21 @@ running, and `failure` otherwise). See the script's own docstring for the
 full reasoning behind each lane; it is the authoritative version, not this
 document.
 
+Since late October 2026 CodeRabbit reports a review as a `CodeRabbit`
+check run, with no commit status at all, measured on
+devcontainer-airlock#195: an automatic review and one asked for with
+`@coderabbitai review` alike. The check run carries the same words, as its
+title while it runs and on the first line of its summary once it ends
+(`Result: Success - Review completed`). So the gate reads both, and
+`src/coderabbit_report.py` hands the verdict the newer report, counting
+only a status whose creator is `coderabbitai[bot]` and a check run whose
+app is `coderabbitai`. Reading check runs needs no permission on a public
+repository (measured with a token holding only metadata), so the gate asks
+for none, and a consumer takes this with a plain pin bump. Its
+`coderabbit-gate.yml` then lists `check_run: types: [completed]` among its
+triggers, so a finished review re-grades at once rather than at the next
+event or sweep.
+
 ## Recovering a stuck `Review Verified`
 
 `coderabbit-gate.yml`'s hourly schedule (`53 * * * *`, offset from

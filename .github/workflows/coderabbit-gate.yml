@@ -26,6 +26,9 @@ on:
   pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   status:
+  # CodeRabbit reports a review as a check run since late October 2026.
+  check_run:
+    types: [completed]
   schedule:
     # :11, offset from every sibling repository's hourly sweep so this
     # organization's gates do not land on the same Actions minute. Taken:
