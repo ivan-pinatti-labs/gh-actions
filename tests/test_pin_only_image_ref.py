@@ -153,6 +153,15 @@ def test_refuses_anything_but_the_pin(tmp_path, old, new):
         ),
         ("trivy:0.74.0@sha256:abc", "trivy:0.74.0@sha256:abc"),
         (OLD + "z", OLD + "z"),
+        # Embedded in a longer token on either side: after `$`, or followed
+        # by a word, path or punctuation character, it is not a reference.
+        (f"${OLD}", f"${OLD}"),
+        *((OLD + tail, OLD + tail) for tail in ("_x", "-x", ".x", "/x", ":x", "@x")),
+        # An image with no registry or namespace is still a reference.
+        (
+            "alpine:3.22@sha256:" + "a" * 64,
+            "alpine:<version>",
+        ),
     ],
 )
 def test_reduction(line, reduced):

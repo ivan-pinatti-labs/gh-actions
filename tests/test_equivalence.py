@@ -72,6 +72,10 @@ LINES = [
     'NEXUS_IMAGE="docker.io/sonatype/nexus3:3.96.3@sha256:' + "f" * 64 + '"',
     "anthropic.claude-code@2.1.274",
     "anthropic.claude-code@2.1.274-beta",
+    # image_ref_pin: a digest pinned image inside a command, and the same
+    # image by tag alone, which it must leave alone.
+    "  docker run --rm docker.io/aquasec/trivy:0.76.1@sha256:" + "e" * 64 + " image .",
+    "  docker run --rm docker.io/aquasec/trivy:0.76.1 image .",
     "",
     "   ",
 ]

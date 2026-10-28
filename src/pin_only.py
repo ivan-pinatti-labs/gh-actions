@@ -236,7 +236,7 @@ SHELL_IMAGE_PIN = re.compile(
 )
 
 # A container image reference pinned by tag and digest together,
-# `registry/name:tag@sha256:<64 hex>`, wherever it stands on a line: the image a
+# `[registry/]name:tag@sha256:<64 hex>`, wherever it stands on a line: the image a
 # workflow step or a hook entry runs with `docker run`, which Renovate's regex
 # managers bump in place. Only a reference carrying a full digest qualifies,
 # so an image pinned by tag alone, or not at all, stays a structural change.
@@ -244,12 +244,13 @@ SHELL_IMAGE_PIN = re.compile(
 # placeholder, since both move on a bump, so another image is a structural
 # change too, and so is everything else on the line: a flag added beside the
 # reference, or a command after it, has no counterpart. The reference has to
-# start a token (nothing but space, a quote or `=` before it) and end one, so
-# it cannot be the tail of a longer word, and a registry with a port does not
-# match at all and fails closed.
+# be a whole token: no word, path, `$`, `:` or `@` character on either side of
+# it, so it cannot be a piece of a longer word or variable. A registry with a
+# port does not match at all and fails closed. A bare name (`alpine:3`, a
+# Docker Hub official image) is still a reference.
 IMAGE_REF_PIN = re.compile(
-    r"(?<![\w./:@-])(?P<prefix>[A-Za-z0-9][A-Za-z0-9._/-]*:)"
-    r"[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}(?![0-9A-Za-z])"
+    r"(?<![\w./:@$-])(?P<prefix>[A-Za-z0-9][A-Za-z0-9._/-]*:)"
+    r"[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}(?![\w./:@$-])"
 )
 
 # A VS Code extension pinned to an exact release, one per line, the way

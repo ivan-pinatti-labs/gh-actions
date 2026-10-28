@@ -25,7 +25,7 @@ caught by the line comparison, not by the path.
 | `arg_pin` | the same, with a stricter name and value pattern | `ARG NAME=<version>` |
 | `arg_tag_commit` | `ARG NAME=v1.2.3@<40 hex>`, a release with the commit it must resolve to, where an annotation made `NAME` eligible | `ARG NAME=<version>@<commit>` |
 | `shell_image_pin` | `NAME=img:tag@sha256:<64 hex>`, bare or double quoted, a shell assignment alone on its line, where an annotation made `NAME` eligible | `NAME=img:<version>`, name, image and quoting kept |
-| `image_ref_pin` | `registry/name:tag@sha256:<64 hex>` anywhere on a line, starting and ending a token, as `docker run` takes it in a workflow step or a hook entry; no registry port | `registry/name:<version>`, registry, name and the rest of the line kept |
+| `image_ref_pin` | `[registry/]name:tag@sha256:<64 hex>` anywhere on a line as a whole token, as `docker run` takes it in a workflow step or a hook entry; no registry port | `[registry/]name:<version>`, registry, name and the rest of the line kept |
 | `vscode_extension_pin` | `publisher.name@1.2.3`, a VS Code extension alone on its line, the version three numbers and nothing else | `publisher.name@<version>`, the identifier kept |
 | `version` | a version after `==`, `>=`, `rev:`, `VERSION=` or a bare `:` | that version only |
 
