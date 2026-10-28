@@ -235,6 +235,23 @@ SHELL_IMAGE_PIN = re.compile(
     r"[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}(?P=quote)[ \t]*$"
 )
 
+# A container image reference pinned by tag and digest together,
+# `registry/name:tag@sha256:<64 hex>`, wherever it stands on a line: the image a
+# workflow step or a hook entry runs with `docker run`, which Renovate's regex
+# managers bump in place. Only a reference carrying a full digest qualifies,
+# so an image pinned by tag alone, or not at all, stays a structural change.
+# The registry and name are kept and the tag and digest replaced by one
+# placeholder, since both move on a bump, so another image is a structural
+# change too, and so is everything else on the line: a flag added beside the
+# reference, or a command after it, has no counterpart. The reference has to
+# start a token (nothing but space, a quote or `=` before it) and end one, so
+# it cannot be the tail of a longer word, and a registry with a port does not
+# match at all and fails closed.
+IMAGE_REF_PIN = re.compile(
+    r"(?<![\w./:@-])(?P<prefix>[A-Za-z0-9][A-Za-z0-9._/-]*:)"
+    r"[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}(?![0-9A-Za-z])"
+)
+
 # A VS Code extension pinned to an exact release, one per line, the way
 # `code --install-extension` takes it: `publisher.name@1.2.3`. The identifier
 # is kept, so another extension (or another publisher's copy of one) is a
@@ -506,6 +523,7 @@ GRAMMARS: dict[str, object] = {
     "docker_image_pin": lambda line, cfg: DOCKER_IMAGE_PIN.sub(
         lambda m: f"{m.group('prefix')}<version>", line
     ),
+    "image_ref_pin": lambda line, cfg: IMAGE_REF_PIN.sub(r"\g<prefix><version>", line),
     "digest": lambda line, cfg: DIGEST.sub("@sha256:<digest>", line),
     "digest_strip": lambda line, cfg: DIGEST.sub("", line),
     "action_sha_strip": lambda line, cfg: ACTION_SHA_STRIP.sub(_strip_action_sha, line),
