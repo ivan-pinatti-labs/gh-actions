@@ -56,8 +56,12 @@ def _changes(compare: dict) -> dict:
         if isinstance(patch, str):
             body = tuple(line for line in patch.split("\n") if line[:1] in ("+", "-"))
         else:
-            # No patch: binary or too large. The blob it ends up as stands in.
-            body = ("blob", str(entry.get("sha") or ""))
+            # No patch: binary or too large. The blob it ends up as stands in,
+            # and without one there is nothing to compare at all.
+            sha = entry.get("sha")
+            if not isinstance(sha, str) or not sha:
+                raise ValueError(f"{entry['filename']} has neither a patch nor a blob")
+            body = ("blob", sha)
         changes[entry["filename"]] = (
             entry.get("status"),
             entry.get("previous_filename"),

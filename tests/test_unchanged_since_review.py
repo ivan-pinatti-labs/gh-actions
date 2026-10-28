@@ -148,6 +148,14 @@ def test_a_file_without_a_patch_is_compared_by_its_blob(sha, unchanged):
             "no filename",
         ),
         ({"reviewed": REVIEWED, "head": {"files": ["x"]}}, "no filename"),
+        # No patch and no blob on both sides would otherwise compare equal.
+        (
+            {
+                "reviewed": {"files": [{"filename": "a.bin", "status": "added"}]},
+                "head": {"files": [{"filename": "a.bin", "status": "added"}]},
+            },
+            "a.bin has neither a patch nor a blob",
+        ),
         (
             {
                 "reviewed": REVIEWED,

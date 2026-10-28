@@ -684,7 +684,10 @@ jobs:
               [ "$sha" != "$HEAD_SHA" ] || continue
               walked=$((walked + 1))
               [ "$walked" -le "$MAX_WALK" ] || break
-              if [ "$(report "$sha")" = "Review completed" ]; then
+              # Captured first: inside an `if` test errexit is off, so a
+              # failed lookup would read as one more commit not reviewed.
+              found=$(report "$sha")
+              if [ "$found" = "Review completed" ]; then
                 reviewed="$sha"
                 break
               fi
