@@ -156,6 +156,15 @@ def test_a_file_without_a_patch_is_compared_by_its_blob(sha, unchanged):
             },
             "a.bin has neither a patch nor a blob",
         ),
+        # An empty blob, and one that is not a string.
+        (
+            {"reviewed": REVIEWED, "head": {"files": [entry(patch=None, sha="")]}},
+            "neither a patch nor a blob",
+        ),
+        (
+            {"reviewed": REVIEWED, "head": {"files": [entry(patch=None, sha=1)]}},
+            "neither a patch nor a blob",
+        ),
         (
             {
                 "reviewed": REVIEWED,
