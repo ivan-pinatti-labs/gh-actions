@@ -106,6 +106,18 @@ DEFAULT_BOTS = frozenset({"renovate[bot]"})
 # working, with no decline behind it at all.
 IN_FLIGHT_DESCRIPTIONS = frozenset({"Review queued", "Review in progress"})
 
+# Not CodeRabbit's words but the gate's own, written by the workflow only
+# after it has checked them: CodeRabbit found no files to review on the head,
+# and src/unchanged_since_review.py found the pull request's own changes the
+# same as at a commit CodeRabbit completed a review on (a merge of the base
+# branch, and nothing of the pull request's own). A bare "No files to review"
+# still fails below, since a push touching only files CodeRabbit ignores
+# reports exactly that and has not been reviewed.
+UNCHANGED_SINCE_REVIEW = (
+    "No files to review, and the pull request's own changes are unchanged "
+    "since a completed review"
+)
+
 
 def decide(data: dict, bots: frozenset[str] = DEFAULT_BOTS) -> tuple[str, str]:
     """Return (state, description) for `Review Verified`."""
@@ -158,6 +170,8 @@ def decide(data: dict, bots: frozenset[str] = DEFAULT_BOTS) -> tuple[str, str]:
         return "pending", "waiting for a CodeRabbit review"
     if description == "Review completed":
         return "success", 'CodeRabbit reports "Review completed"'
+    if description == UNCHANGED_SINCE_REVIEW:
+        return "success", "unchanged since a completed CodeRabbit review"
     if description in IN_FLIGHT_DESCRIPTIONS:
         return "pending", f'CodeRabbit reports "{description}"'
     return "failure", f'CodeRabbit reports "{description}", which is not a review'
