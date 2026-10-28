@@ -616,10 +616,6 @@ jobs:
 
       - name: Read CodeRabbit's latest report on the real head
         id: coderabbit
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ matrix.entry.head_sha }}
         # CodeRabbit reports a review as a commit status, and since late
         # October 2026 as a `CodeRabbit` check run instead, so both are read
         # and src/coderabbit_report.py takes the newer, counting only reports
@@ -643,17 +639,77 @@ jobs:
         # GITHUB_OUTPUT. A newline in a `key=value` line lets whatever follows
         # it be parsed as another output, so an unsanitised description could
         # set `state=success` on the very check meant to withhold it.
+        #
+        # After a merge of the base branch into the pull request, CodeRabbit
+        # has nothing of the pull request's own to review and reports `No
+        # files to review`, which the verdict fails, since a push touching only
+        # files CodeRabbit ignores reports the same. So on that report alone
+        # this step walks back to the newest commit of the pull request
+        # CodeRabbit completed a review on, at most MAX_WALK commits, and asks
+        # src/unchanged_since_review.py whether the pull request's own diff
+        # (three dot compare against the base branch) is the same there and at
+        # the head. Only then does the description become the gate's own
+        # UNCHANGED_SINCE_REVIEW wording, which the verdict passes; every other
+        # outcome leaves `No files to review`, which it fails.
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ matrix.entry.head_sha }}
+          PR_NUMBER: ${{ matrix.entry.pr_number }}
+          MAX_WALK: "20"
         run: |
           set -euo pipefail
-          gh api --paginate "repos/$REPO/commits/$HEAD_SHA/statuses" \
-            | jq -s 'add // []' > "$RUNNER_TEMP/statuses.json"
-          runs="check-runs?check_name=CodeRabbit&filter=all&per_page=100"
-          gh api --paginate "repos/$REPO/commits/$HEAD_SHA/$runs" \
-            | jq -s '[.[].check_runs[]]' > "$RUNNER_TEMP/check-runs.json"
-          jq -s '{statuses: .[0], check_runs: .[1]}' \
-            "$RUNNER_TEMP/statuses.json" "$RUNNER_TEMP/check-runs.json" \
-            | python3 .gh-actions-library/src/coderabbit_report.py >> "$GITHUB_OUTPUT"
+          shopt -s inherit_errexit
+          library=.gh-actions-library/src
+          report() {
+            # CodeRabbit's newest trusted report on commit $1, as its words.
+            local sha="$1"
+            gh api --paginate "repos/$REPO/commits/$sha/statuses" \
+              | jq -s 'add // []' > "$RUNNER_TEMP/statuses.json"
+            gh api --paginate \
+              "repos/$REPO/commits/$sha/check-runs?check_name=CodeRabbit&filter=all&per_page=100" \
+              | jq -s '[.[].check_runs[]]' > "$RUNNER_TEMP/check-runs.json"
+            jq -s '{statuses: .[0], check_runs: .[1]}' \
+              "$RUNNER_TEMP/statuses.json" "$RUNNER_TEMP/check-runs.json" \
+              | python3 "$library/coderabbit_report.py" | sed -n 's/^description=//p'
+          }
+          description=$(report "$HEAD_SHA")
+          if [ "$description" = "No files to review" ]; then
+            gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/commits?per_page=100" \
+              | jq -s -r '[.[][].sha] | reverse | .[]' > "$RUNNER_TEMP/commits.txt"
+            reviewed=""
+            walked=0
+            while IFS= read -r sha; do
+              [ "$sha" != "$HEAD_SHA" ] || continue
+              walked=$((walked + 1))
+              [ "$walked" -le "$MAX_WALK" ] || break
+              # Captured first: inside an `if` test errexit is off, so a
+              # failed lookup would read as one more commit not reviewed.
+              found=$(report "$sha")
+              if [ "$found" = "Review completed" ]; then
+                reviewed="$sha"
+                break
+              fi
+            done < "$RUNNER_TEMP/commits.txt"
+            if [ -n "$reviewed" ]; then
+              base=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.base.ref')
+              base=$(jq -rn --arg b "$base" '$b | @uri')
+              gh api "repos/$REPO/compare/$base...$reviewed" > "$RUNNER_TEMP/reviewed.json"
+              gh api "repos/$REPO/compare/$base...$HEAD_SHA" > "$RUNNER_TEMP/head.json"
+              jq -s '{reviewed: .[0], head: .[1]}' \
+                "$RUNNER_TEMP/reviewed.json" "$RUNNER_TEMP/head.json" \
+                | python3 "$library/unchanged_since_review.py" > "$RUNNER_TEMP/unchanged.txt"
+              cat "$RUNNER_TEMP/unchanged.txt"
+              if grep -qx 'unchanged=true' "$RUNNER_TEMP/unchanged.txt"; then
+                description=$(PYTHONPATH="$library" python3 -c \
+                  'import review_verdict as v; print(v.UNCHANGED_SINCE_REVIEW)')
+              fi
+            else
+              echo "No completed CodeRabbit review in the last $MAX_WALK commits."
+            fi
+          fi
+          echo "description=$description" >> "$GITHUB_OUTPUT"
 
       - name: Decide Review Verified
         id: verdict

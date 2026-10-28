@@ -201,6 +201,20 @@ until a consumer adds `check_run: types: [completed]` to its own
 `coderabbit-gate.yml`, a finished review is graded at the next event or
 sweep rather than at once.
 
+After the base branch is merged into a pull request (which GitHub's auto
+merge asks for when `main` touched the same workflow file), CodeRabbit
+reviews only what is new to the pull request, finds nothing, and reports
+`No files to review`. That alone fails the gate, because a push touching
+only files CodeRabbit ignores reports the same words. So on `No files to
+review` the gate walks back through the pull request's commits (at most 20)
+to the newest one CodeRabbit reported `Review completed` on, and asks
+GitHub's three dot compare for the pull request's own diff at that commit
+and at the head. `src/unchanged_since_review.py` passes it only when every
+file, its status, its previous name and its added and removed lines are the
+same in both; anything else, an ignored file included, still fails closed.
+The verdict then reads the gate's own description for that case, never
+CodeRabbit's bare words.
+
 ## Recovering a stuck `Review Verified`
 
 `coderabbit-gate.yml`'s hourly schedule (`53 * * * *`, offset from
