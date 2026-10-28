@@ -94,6 +94,7 @@
     "readonly",
     "renovate",
     "rollup",
+    "rootfs",
     "SARIF",
     "shellcheck",
     "shopt",
