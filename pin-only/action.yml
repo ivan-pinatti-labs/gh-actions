@@ -14,7 +14,9 @@ description: >-
 # The `hash_locked_requirements` grammar asks PyPI for the hashes of every
 # package a lock bump moves, from inside the script, so a repository using it
 # needs this step to reach pypi.org over HTTPS. A GitHub hosted runner does;
-# one that restricts egress has to allow it. Unreachable fails closed.
+# one that restricts egress has to allow it. Unreachable fails closed. The
+# image age check (`image-age`, on by default) asks each changed image's
+# registry the same way.
 
 inputs:
   diff:
@@ -41,6 +43,13 @@ inputs:
     description: Newline separated override for default_grammars.
     required: false
     default: ""
+  image-age:
+    description: >-
+      "true" refuses an image pin bump whose new image was built before the
+      one it replaces, asking each image's registry, so the runner has to
+      reach them. Unreachable fails closed.
+    required: false
+    default: "true"
 
 outputs:
   verdict:
@@ -67,6 +76,7 @@ runs:
         PIN_ONLY_REPO_ROOT: ${{ inputs.repo-root }}
         PIN_ONLY_ALLOWED_PATHS: ${{ inputs.allowed-paths }}
         PIN_ONLY_GRAMMARS: ${{ inputs.grammars }}
+        PIN_ONLY_IMAGE_AGE: ${{ inputs.image-age }}
       run: |
         set -o errexit
         set -o pipefail
@@ -95,6 +105,17 @@ runs:
         while IFS= read -r grammar; do
           [ -n "${grammar}" ] && args+=(--grammar "${grammar}")
         done <<< "${PIN_ONLY_GRAMMARS}"
+
+        # Anything but the two values is refused rather than read as off, so a
+        # typo cannot quietly skip the check its documentation says is on.
+        case "${PIN_ONLY_IMAGE_AGE}" in
+          true) args+=(--image-age) ;;
+          false) ;;
+          *)
+            echo "pin-only: image-age must be \"true\" or \"false\", got: ${PIN_ONLY_IMAGE_AGE}" >&2
+            exit 1
+            ;;
+        esac
 
         if [ -n "${PIN_ONLY_DIFF}" ]; then
           exec_input=("${PIN_ONLY_DIFF}")

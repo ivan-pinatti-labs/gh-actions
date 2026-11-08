@@ -73,7 +73,37 @@ arg_sources:
   - file: Dockerfile
     annotations:
       - '^#\s*renovate:'
+
+# Refuse an image pin bump whose new image was built before the one it
+# replaces. Off by default in the library; `--image-age`, the reusable gate
+# (`pin_only_image_age`, default true) and the composite action (`image-age`,
+# default "true") turn it on. See "Image age" below.
+image_age: true
 ```
+
+## Image age
+
+The line grammars prove a diff changes nothing but versions. They cannot tell
+a release from a decoy: an image's tag history can hold a tag that orders above
+the real version line and is an old build from another line. A dependency bot
+offered `docker.io/linuxserver/qbittorrent` `5.2.2 -> 20.04.1`, a build from
+2021 that passed a whole integration suite, and `docker.io/linuxserver/mylar3`
+`v0.11.0-ls277 -> 3ea9b997-ls249`, an older build from another branch.
+
+With the check on, every image pin a pin-only diff moves to another digest is
+looked up in its registry, both sides, and the bump is refused when the new
+image's `created` date (linux/amd64, to the second) is before the old one's.
+The image is read from the line (`[registry/]name[:tag]@sha256:...`), or, for
+a bare `NAME=tag@sha256:...`, from a `# renovate: ... depName=<image>`
+annotation on the line directly above it.
+
+It fails closed: a registry that cannot be reached, an image with no build date
+(reproducible builds stamp the Unix epoch), or a pin whose image cannot be told
+is refused, which only means the pull request waits for a person. It runs last,
+and only on a diff that is otherwise pin-only, so a refused diff spends no
+registry requests. Registries are asked anonymously, through the bearer
+challenge Docker Hub, GHCR, GCR and Quay all answer, and a registry's token is
+never sent on to the storage host its blobs redirect to.
 
 ## Inputs
 

@@ -44,10 +44,13 @@ import hashlib
 import json
 import re
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 
 RELEASE = r"v?[0-9][0-9A-Za-z.+_-]*"
@@ -499,6 +502,9 @@ class Config:
     rules: tuple[PathRule, ...] = ()
     arg_sources: tuple[ArgSource, ...] = ()
     repo_root: Path = Path(".")
+    # Ask each changed image pin's registry whether the bump moves to an
+    # older build; see `_image_age_problems`.
+    image_age: bool = False
 
     def rule_for(self, path: str) -> PathRule | None:
         for rule in self.rules:
@@ -845,6 +851,315 @@ def _hash_locked_problems(diff_lines: list[str], paths: set[str]) -> list[str]:
     return problems
 
 
+# Image age: a bump may not move an image pin to an older build.
+#
+# The line grammars prove a diff changes nothing but versions. They cannot
+# tell a release from a decoy: an image's tag history can hold a tag that
+# orders above the real version line and is an old build. A dependency bot
+# offered `docker.io/linuxserver/qbittorrent` `5.2.2 -> 20.04.1`, a build four
+# years older that passed a whole integration suite, and `mylar3`
+# `v0.11.0-ls277 -> 3ea9b997-ls249`, an older build from another branch. Both
+# are refused here by asking the registry when each side was built. Off unless
+# the configuration or `--image-age` turns it on, which the reusable gate does.
+
+# An image reference pinned by digest, with or without a tag,
+# `[registry/]name[:tag]@sha256:<64 hex>`, as a whole token. A registry with a
+# port does not match, and its digest is then refused as unidentified.
+IMAGE_DIGEST_REF = re.compile(
+    r"(?<![\w./:@$-])(?P<image>[A-Za-z0-9][A-Za-z0-9._/-]*)"
+    r"(?::[A-Za-z0-9._-]+)?@(?P<digest>sha256:[0-9a-f]{64})"
+)
+PIN_DIGEST = re.compile(r"@(?P<digest>sha256:[0-9a-f]{64})")
+# The Renovate annotation naming the image of a bare `NAME=tag@sha256:...`
+# pin on the line below it, the way docker-torrent-box-with-vpn's versions.env
+# is written.
+DEP_NAME = re.compile(r"#\s*renovate:.*?\bdepName=(?P<image>\S+)")
+
+# Docker Hub serves its registry API from a host of its own.
+REGISTRY_HOSTS = {"docker.io": "registry-1.docker.io"}
+MANIFEST_TYPES = ", ".join(
+    (
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+    )
+)
+# Anchored to the start of a word, so a long header with no `="` in it scans
+# in linear time rather than retrying from every character of each word.
+CHALLENGE_PARAM = re.compile(r'(?<!\w)(\w+)="([^"]*)"')
+# Each registry request's timeout, and the whole check's budget. The gate's
+# grade job has five minutes, so a slow registry is refused rather than
+# cancelling the job before it publishes a verdict.
+REGISTRY_TIMEOUT = 10
+IMAGE_AGE_BUDGET = 120
+# An image config's `created`, to the second. Fractions are dropped, since Go
+# writes nine digits and two builds in one second order as equal, which this
+# allows.
+CREATED = re.compile(
+    r"^(?P<second>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?"
+    r"(?P<zone>Z|[+-]\d{2}:\d{2})$"
+)
+
+
+@dataclass(frozen=True)
+class ImageBump:
+    """One image pin a diff moves from one digest to another."""
+
+    path: str
+    image: str
+    old: str
+    new: str
+
+
+def _digest_refs(line: str, above: str) -> list[tuple[str, str]]:
+    """Every (image, digest) a line pins.
+
+    An annotation directly above names the image of a bare `tag@digest`, and
+    wins over reading the line, where such a pin would otherwise parse as an
+    image named after its tag.
+    """
+    annotated = DEP_NAME.search(above)
+    digests = PIN_DIGEST.findall(line)
+    if annotated and len(digests) == 1:
+        return [(annotated.group("image"), digests[0])]
+    return [
+        (m.group("image"), m.group("digest")) for m in IMAGE_DIGEST_REF.finditer(line)
+    ]
+
+
+def _image_bumps(
+    diff_lines: list[str], paths: set[str]
+) -> tuple[list[ImageBump], list[str]]:
+    """Pair each removed image pin with the added line that replaces it.
+
+    Within a run of removed lines followed by added ones, the nth removed line
+    pairs with the nth added one, which is how a bot rewrites a pin in place.
+    The line grammars prove the two sides match per file, not per run, so a
+    run of unequal length holding a pin is refused rather than paired.
+    """
+    bumps: list[ImageBump] = []
+    problems: list[str] = []
+    path = None
+    in_hunk = False
+    above = ""
+    removed: list[tuple[str, str]] = []
+    added: list[str] = []
+
+    def flush() -> None:
+        if len(removed) != len(added) and any(
+            PIN_DIGEST.search(line) for line in [*(r[0] for r in removed), *added]
+        ):
+            problems.append(
+                f"{path}: a run of {len(removed)} removed and {len(added)} added "
+                "lines holds an image pin, so its old and new image cannot be paired"
+            )
+            removed.clear()
+            added.clear()
+            return
+        for (old_line, above_it), new_line in zip(removed, added, strict=True):
+            if not PIN_DIGEST.search(old_line + new_line):
+                continue
+            old_refs = _digest_refs(old_line, above_it)
+            new_refs = _digest_refs(new_line, above_it)
+            if not old_refs or len(old_refs) != len(new_refs):
+                problems.append(
+                    f"{path}: could not tell which image this pin is: +{new_line}"
+                )
+                continue
+            for (image, old), (_, new) in zip(old_refs, new_refs, strict=True):
+                if old != new:
+                    bumps.append(ImageBump(path, image, old, new))
+        removed.clear()
+        added.clear()
+
+    for line in diff_lines:
+        header = FILE_HEADER.match(line)
+        if header:
+            flush()
+            path = header.group("new") if header.group("new") in paths else None
+            in_hunk = False
+            above = ""
+            continue
+        # The `---`/`+++` pair and the index line come before the first hunk.
+        # Inside one, `--- x` is a removed line reading `-- x`, as `parse`
+        # also knows, and skipping it would drop it from its run.
+        if path is None or line.startswith("@@") or not in_hunk:
+            flush()
+            in_hunk = in_hunk or line.startswith("@@")
+            above = ""
+            continue
+        if line.startswith("-"):
+            if added:
+                flush()
+            removed.append((line[1:], removed[-1][0] if removed else above))
+        elif line.startswith("+"):
+            added.append(line[1:])
+        else:
+            flush()
+            above = line[1:]
+    flush()
+    return bumps, problems
+
+
+def _registry_and_repository(image: str) -> tuple[str, str]:
+    """The registry API host and repository for an image name."""
+    first, _, rest = image.partition("/")
+    if rest and ("." in first or first == "localhost"):
+        registry, repository = first, rest
+    else:
+        registry, repository = "docker.io", image
+    if registry == "docker.io" and "/" not in repository:
+        repository = "library/" + repository
+    return REGISTRY_HOSTS.get(registry, registry), repository
+
+
+class _NoAuthOnRedirect(urllib.request.HTTPRedirectHandler):
+    """Follow a registry's redirect, but never carry its token elsewhere.
+
+    Blob downloads redirect to a storage host, which must not receive the
+    registry's bearer token, and some refuse a request that carries one.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urlsplit(newurl)
+        if target.scheme != "https":
+            raise ValueError(f"registry redirected to a non https URL: {newurl}")
+        # The base class raises rather than returning None for a redirect it
+        # will not follow, so `new` is always a request here.
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if target.netloc != urllib.parse.urlsplit(req.full_url).netloc:
+            new.remove_header("Authorization")
+        return new
+
+
+_OPENER = urllib.request.build_opener(_NoAuthOnRedirect)
+
+
+def _fetch(url: str, headers: dict[str, str]) -> bytes:
+    request = urllib.request.Request(url, headers=headers)  # noqa: S310
+    with _OPENER.open(request, timeout=REGISTRY_TIMEOUT) as response:
+        return response.read()
+
+
+# A pull token per (host, repository), reused for every object of one image
+# rather than asked for again on each request. A 401 replaces it.
+_TOKENS: dict[tuple[str, str], str] = {}
+
+
+def _bearer_token(challenge: str) -> str:
+    """A pull token for the scope a registry's 401 challenge names."""
+    scheme, _, params = challenge.partition(" ")
+    if scheme.lower() != "bearer":
+        raise ValueError(f"unsupported registry challenge: {scheme!r}")
+    fields = dict(CHALLENGE_PARAM.findall(params))
+    realm = fields.pop("realm", "")
+    if urllib.parse.urlsplit(realm).scheme != "https":
+        raise ValueError(f"registry token realm is not https: {realm!r}")
+    answer = json.loads(
+        _fetch(f"{realm}?{urllib.parse.urlencode(fields)}", {"User-Agent": "pin-only"})
+    )
+    token = answer.get("token") or answer.get("access_token")
+    if not token:
+        raise ValueError("the registry's token answer carries no token")
+    return token
+
+
+def _registry_get(host: str, repository: str, path: str, accept: str) -> bytes:
+    """GET one object, answering an anonymous bearer challenge if asked."""
+    url = f"https://{host}/v2/{repository}/{path}"
+    headers = {"Accept": accept, "User-Agent": "pin-only"}
+    key = (host, repository)
+    cached = _TOKENS.get(key)
+    try:
+        if cached:
+            return _fetch(url, {**headers, "Authorization": f"Bearer {cached}"})
+        return _fetch(url, headers)
+    except urllib.error.HTTPError as error:
+        if error.code != 401:
+            raise
+        challenge = error.headers.get("WWW-Authenticate", "")
+    _TOKENS[key] = _bearer_token(challenge)
+    return _fetch(url, {**headers, "Authorization": f"Bearer {_TOKENS[key]}"})
+
+
+def _build_date(value: object) -> datetime:
+    """An image config's `created`, refused when it is not a real date.
+
+    Reproducible builds stamp the Unix epoch, which says nothing about age.
+    """
+    match = CREATED.match(value) if isinstance(value, str) else None
+    if not match:
+        raise ValueError(f"no build date in the image ({value!r})")
+    zone = "+00:00" if match.group("zone") == "Z" else match.group("zone")
+    created = datetime.fromisoformat(match.group("second") + zone)
+    if created.year < 2000:
+        raise ValueError(f"no real build date in the image ({value})")
+    return created
+
+
+def _image_created(image: str, digest: str) -> datetime:
+    """When the linux/amd64 image behind one digest was built."""
+    host, repository = _registry_and_repository(image)
+    try:
+        manifest = json.loads(
+            _registry_get(host, repository, f"manifests/{digest}", MANIFEST_TYPES)
+        )
+        if "manifests" in manifest:
+            chosen = next(
+                (
+                    entry["digest"]
+                    for entry in manifest["manifests"]
+                    if (entry.get("platform") or {}).get("os") == "linux"
+                    and entry["platform"].get("architecture") == "amd64"
+                ),
+                None,
+            )
+            if chosen is None:
+                raise ValueError("no linux/amd64 image behind the digest")
+            manifest = json.loads(
+                _registry_get(host, repository, f"manifests/{chosen}", MANIFEST_TYPES)
+            )
+        config = json.loads(
+            _registry_get(
+                host, repository, f"blobs/{manifest['config']['digest']}", "*/*"
+            )
+        )
+        return _build_date(config.get("created"))
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ValueError(f"unexpected answer from the registry: {error!r}") from error
+
+
+def _image_age_problems(bumps: list[ImageBump]) -> list[str]:
+    """Refuse a bump whose new image was built before the one it replaces."""
+    problems: list[str] = []
+    deadline = time.monotonic() + IMAGE_AGE_BUDGET
+    for index, bump in enumerate(bumps):
+        if time.monotonic() > deadline:
+            problems.append(
+                f"the registry lookups ran past {IMAGE_AGE_BUDGET}s with "
+                f"{len(bumps) - index} image pin(s) unchecked, so they are not "
+                "graded as pins"
+            )
+            break
+        try:
+            was = _image_created(bump.image, bump.old)
+            now = _image_created(bump.image, bump.new)
+        except (OSError, ValueError) as error:
+            problems.append(
+                f"{bump.path}: could not confirm {bump.image}'s build dates "
+                f"with its registry ({error}), so the bump is not graded as a pin"
+            )
+            continue
+        if now < was:
+            problems.append(
+                f"{bump.path}: moves {bump.image} to a build from "
+                f"{now:%Y-%m-%d}, older than the current one from {was:%Y-%m-%d}. "
+                "A newer tag on an older image is a decoy, not an update"
+            )
+    return problems
+
+
 def _grammars(entries: list) -> tuple[Grammar, ...]:
     """Read a grammar list, where each entry is a name or a {name, when} map."""
     out: list[Grammar] = []
@@ -920,12 +1235,17 @@ def load_config(
             )
         )
 
+    image_age = data.get("image_age", False)
+    if not isinstance(image_age, bool):
+        sys.exit(f"pin-only: image_age must be true or false, got: {image_age!r}")
+
     config = Config(
         allowed_paths=tuple(data.get("allowed_paths", []) or []),
         default_grammars=_grammars(data.get("default_grammars", []) or []),
         rules=tuple(rules),
         arg_sources=tuple(arg_sources),
         repo_root=repo_root,
+        image_age=image_age,
     )
 
     for key, value in (overrides or {}).items():
@@ -933,6 +1253,8 @@ def load_config(
             config = replace(config, allowed_paths=tuple(value))
         elif key == "default_grammars" and value:
             config = replace(config, default_grammars=_grammars(list(value)))
+        elif key == "image_age" and value:
+            config = replace(config, image_age=True)
 
     _validate(config)
     return config
@@ -1367,6 +1689,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         dest="default_grammars",
         help="Override default_grammars. Repeatable.",
     )
+    parser.add_argument(
+        "--image-age",
+        action="store_true",
+        help="Refuse an image pin bump to an older build, asking each registry.",
+    )
     return parser.parse_args(argv)
 
 
@@ -1379,6 +1706,7 @@ def main(argv: list[str] | None = None) -> int:
     overrides: dict[str, object] = {
         "allowed_paths": args.allowed_paths,
         "default_grammars": args.default_grammars,
+        "image_age": args.image_age,
     }
     if explicit:
         overrides["config_was_explicit"] = True
@@ -1432,6 +1760,15 @@ def main(argv: list[str] | None = None) -> int:
             problems.append(
                 f"{path}: added a line that was not a version bump: +{line}"
             )
+
+    # Asked last and only of a diff that is otherwise pin-only, so a refused
+    # diff spends no registry requests.
+    if not problems and _ACTIVE.image_age:
+        bumps, unidentified = _image_bumps(
+            diff.splitlines(), {path for path in changes if path not in locked}
+        )
+        problems.extend(unidentified)
+        problems.extend(_image_age_problems(bumps))
 
     if problems:
         print("REFUSED: this diff changes more than dependency pins.")
