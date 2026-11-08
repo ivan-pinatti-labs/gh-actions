@@ -114,6 +114,16 @@ on:
         required: false
         type: string
         default: ""
+      pin_only_image_age:
+        description: >-
+          Refuse an image pin bump whose new image was built before the one it
+          replaces, asking each image's registry (pin_only.py --image-age).
+          On by default: a tag that orders above the pin can be an old build
+          from another line, which every line grammar accepts. Turn it off
+          only in a repository whose runner cannot reach its registries.
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -550,6 +560,7 @@ jobs:
           PIN_ONLY_CONFIG: ${{ inputs.pin_only_config }}
           PIN_ONLY_ALLOWED_PATHS: ${{ inputs.pin_only_allowed_paths }}
           PIN_ONLY_GRAMMARS: ${{ inputs.pin_only_grammars }}
+          PIN_ONLY_IMAGE_AGE: ${{ inputs.pin_only_image_age }}
         # Only a dependency bot's own, non-fork pull request is asked to be
         # pin-only at all. Everything else passes unconditionally with a
         # description that says why, which is what keeps requiring this
@@ -578,6 +589,9 @@ jobs:
             while IFS= read -r grammar; do
               [ -n "$grammar" ] && pin_args+=(--grammar "$grammar")
             done <<< "$PIN_ONLY_GRAMMARS"
+            if [ "$PIN_ONLY_IMAGE_AGE" = "true" ]; then
+              pin_args+=(--image-age)
+            fi
 
             output=$(gh pr diff "$PR_NUMBER" \
               | python3 .gh-actions-library/src/pin_only.py \
