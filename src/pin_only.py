@@ -44,6 +44,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -884,7 +885,14 @@ MANIFEST_TYPES = ", ".join(
         "application/vnd.docker.distribution.manifest.v2+json",
     )
 )
-CHALLENGE_PARAM = re.compile(r'(\w+)="([^"]*)"')
+# Anchored to the start of a word, so a long header with no `="` in it scans
+# in linear time rather than retrying from every character of each word.
+CHALLENGE_PARAM = re.compile(r'(?<!\w)(\w+)="([^"]*)"')
+# Each registry request's timeout, and the whole check's budget. The gate's
+# grade job has five minutes, so a slow registry is refused rather than
+# cancelling the job before it publishes a verdict.
+REGISTRY_TIMEOUT = 10
+IMAGE_AGE_BUDGET = 120
 # An image config's `created`, to the second. Fractions are dropped, since Go
 # writes nine digits and two builds in one second order as equal, which this
 # allows.
@@ -927,17 +935,29 @@ def _image_bumps(
 
     Within a run of removed lines followed by added ones, the nth removed line
     pairs with the nth added one, which is how a bot rewrites a pin in place.
-    The line grammars have already refused anything that is not a pin bump.
+    The line grammars prove the two sides match per file, not per run, so a
+    run of unequal length holding a pin is refused rather than paired.
     """
     bumps: list[ImageBump] = []
     problems: list[str] = []
     path = None
+    in_hunk = False
     above = ""
     removed: list[tuple[str, str]] = []
     added: list[str] = []
 
     def flush() -> None:
-        for (old_line, above_it), new_line in zip(removed, added, strict=False):
+        if len(removed) != len(added) and any(
+            PIN_DIGEST.search(line) for line in [*(r[0] for r in removed), *added]
+        ):
+            problems.append(
+                f"{path}: a run of {len(removed)} removed and {len(added)} added "
+                "lines holds an image pin, so its old and new image cannot be paired"
+            )
+            removed.clear()
+            added.clear()
+            return
+        for (old_line, above_it), new_line in zip(removed, added, strict=True):
             if not PIN_DIGEST.search(old_line + new_line):
                 continue
             old_refs = _digest_refs(old_line, above_it)
@@ -958,10 +978,15 @@ def _image_bumps(
         if header:
             flush()
             path = header.group("new") if header.group("new") in paths else None
+            in_hunk = False
             above = ""
             continue
-        if path is None or line.startswith(("---", "+++", "@@")):
+        # The `---`/`+++` pair and the index line come before the first hunk.
+        # Inside one, `--- x` is a removed line reading `-- x`, as `parse`
+        # also knows, and skipping it would drop it from its run.
+        if path is None or line.startswith("@@") or not in_hunk:
             flush()
+            in_hunk = in_hunk or line.startswith("@@")
             above = ""
             continue
         if line.startswith("-"):
@@ -1013,8 +1038,13 @@ _OPENER = urllib.request.build_opener(_NoAuthOnRedirect)
 
 def _fetch(url: str, headers: dict[str, str]) -> bytes:
     request = urllib.request.Request(url, headers=headers)  # noqa: S310
-    with _OPENER.open(request, timeout=30) as response:
+    with _OPENER.open(request, timeout=REGISTRY_TIMEOUT) as response:
         return response.read()
+
+
+# A pull token per (host, repository), reused for every object of one image
+# rather than asked for again on each request. A 401 replaces it.
+_TOKENS: dict[tuple[str, str], str] = {}
 
 
 def _bearer_token(challenge: str) -> str:
@@ -1039,14 +1069,18 @@ def _registry_get(host: str, repository: str, path: str, accept: str) -> bytes:
     """GET one object, answering an anonymous bearer challenge if asked."""
     url = f"https://{host}/v2/{repository}/{path}"
     headers = {"Accept": accept, "User-Agent": "pin-only"}
+    key = (host, repository)
+    cached = _TOKENS.get(key)
     try:
+        if cached:
+            return _fetch(url, {**headers, "Authorization": f"Bearer {cached}"})
         return _fetch(url, headers)
     except urllib.error.HTTPError as error:
         if error.code != 401:
             raise
         challenge = error.headers.get("WWW-Authenticate", "")
-    token = _bearer_token(challenge)
-    return _fetch(url, {**headers, "Authorization": f"Bearer {token}"})
+    _TOKENS[key] = _bearer_token(challenge)
+    return _fetch(url, {**headers, "Authorization": f"Bearer {_TOKENS[key]}"})
 
 
 def _build_date(value: object) -> datetime:
@@ -1099,7 +1133,15 @@ def _image_created(image: str, digest: str) -> datetime:
 def _image_age_problems(bumps: list[ImageBump]) -> list[str]:
     """Refuse a bump whose new image was built before the one it replaces."""
     problems: list[str] = []
-    for bump in bumps:
+    deadline = time.monotonic() + IMAGE_AGE_BUDGET
+    for index, bump in enumerate(bumps):
+        if time.monotonic() > deadline:
+            problems.append(
+                f"the registry lookups ran past {IMAGE_AGE_BUDGET}s with "
+                f"{len(bumps) - index} image pin(s) unchecked, so they are not "
+                "graded as pins"
+            )
+            break
         try:
             was = _image_created(bump.image, bump.old)
             now = _image_created(bump.image, bump.new)

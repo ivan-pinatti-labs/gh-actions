@@ -106,9 +106,16 @@ runs:
           [ -n "${grammar}" ] && args+=(--grammar "${grammar}")
         done <<< "${PIN_ONLY_GRAMMARS}"
 
-        if [ "${PIN_ONLY_IMAGE_AGE}" = "true" ]; then
-          args+=(--image-age)
-        fi
+        # Anything but the two values is refused rather than read as off, so a
+        # typo cannot quietly skip the check its documentation says is on.
+        case "${PIN_ONLY_IMAGE_AGE}" in
+          true) args+=(--image-age) ;;
+          false) ;;
+          *)
+            echo "pin-only: image-age must be \"true\" or \"false\", got: ${PIN_ONLY_IMAGE_AGE}" >&2
+            exit 1
+            ;;
+        esac
 
         if [ -n "${PIN_ONLY_DIFF}" ]; then
           exec_input=("${PIN_ONLY_DIFF}")

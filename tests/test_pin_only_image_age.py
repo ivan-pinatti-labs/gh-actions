@@ -73,6 +73,12 @@ MAY = datetime(2026, 5, 1, tzinfo=UTC)
 OCTOBER = datetime(2026, 10, 1, tzinfo=UTC)
 
 
+@pytest.fixture(autouse=True)
+def no_cached_tokens(monkeypatch):
+    """Each test starts with no registry token cached by another."""
+    monkeypatch.setattr(pin_only, "_TOKENS", {})
+
+
 @pytest.fixture
 def built(monkeypatch):
     """Stub the registry with a table of build dates, recording every query."""
@@ -155,6 +161,24 @@ def test_refuses_when_the_registry_cannot_confirm(
     assert "could not confirm docker.io/linuxserver/mylar3's build dates" in out
 
 
+def test_refuses_the_pins_left_when_the_budget_runs_out(monkeypatch, built):
+    clock = iter([0, 0, pin_only.IMAGE_AGE_BUDGET + 1])
+    monkeypatch.setattr(pin_only.time, "monotonic", lambda: next(clock))
+    built[("a", OLD)] = MAY
+    built[("a", NEW)] = OCTOBER
+    bumps = [
+        pin_only.ImageBump("Makefile", "a", OLD, NEW),
+        pin_only.ImageBump("Makefile", "b", OLD, NEW),
+    ]
+
+    problems = pin_only._image_age_problems(bumps)
+
+    assert problems == [
+        f"the registry lookups ran past {pin_only.IMAGE_AGE_BUDGET}s with 1 "
+        "image pin(s) unchecked, so they are not graded as pins"
+    ]
+
+
 def test_off_unless_asked(tmp_path, monkeypatch, capsys, built):
     code, out = _run(monkeypatch, capsys, tmp_path, ENV_DIFF, "false")
 
@@ -193,6 +217,42 @@ def test_refuses_an_image_age_that_is_not_a_boolean(tmp_path, monkeypatch, capsy
 
 def _bumps(diff: str, paths=("versions.env", "Dockerfile", "Makefile")):
     return pin_only._image_bumps(diff.splitlines(), set(paths))
+
+
+def test_refuses_a_run_of_unequal_length_holding_a_pin():
+    diff = _diff(
+        "diff --git a/Dockerfile b/Dockerfile",
+        "@@ -1,2 +1,1 @@",
+        f"-FROM ghcr.io/a/one:1@{OLD}",
+        "-RUN true",
+        f"+FROM ghcr.io/a/one:2@{NEW}",
+    )
+    bumps, problems = _bumps(diff)
+
+    assert bumps == []
+    assert problems == [
+        "Dockerfile: a run of 2 removed and 1 added lines holds an image pin, "
+        "so its old and new image cannot be paired"
+    ]
+
+
+def test_a_removed_line_reading_like_a_file_header_stays_in_its_run():
+    # `-- x` removed reads `--- x` in the diff, which outside a hunk would be
+    # a file header line.
+    diff = _diff(
+        "diff --git a/Dockerfile b/Dockerfile",
+        "--- a/Dockerfile",
+        "+++ b/Dockerfile",
+        "@@ -1,2 +1,2 @@",
+        f"-FROM ghcr.io/a/one:1@{OLD}",
+        "--- x",
+        f"+FROM ghcr.io/a/one:2@{NEW}",
+        "+-- x",
+    )
+    bumps, problems = _bumps(diff)
+
+    assert problems == []
+    assert [(b.image, b.new) for b in bumps] == [("ghcr.io/a/one", NEW)]
 
 
 def test_pairs_each_pin_in_a_run_with_its_replacement():
@@ -356,7 +416,7 @@ def test_fetch_sends_the_headers_through_the_opener(monkeypatch):
     monkeypatch.setattr(pin_only, "_OPENER", Opener())
 
     assert pin_only._fetch("https://x/y", {"Accept": "a/b"}) == b"body"
-    assert seen == {"accept": "a/b", "timeout": 30}
+    assert seen == {"accept": "a/b", "timeout": pin_only.REGISTRY_TIMEOUT}
 
 
 def _http_error(code: int, challenge: str = "") -> urllib.error.HTTPError:
@@ -398,6 +458,32 @@ def test_registry_get_answers_a_bearer_challenge(monkeypatch):
         ),
         ("https://registry.example/v2/a/b/manifests/x", "Bearer t0k"),
     ]
+
+
+def test_registry_get_reuses_a_token_and_replaces_a_refused_one(monkeypatch):
+    requests = []
+    tokens = iter(["first", "second"])
+
+    def fake(url, headers):
+        auth = headers.get("Authorization")
+        requests.append((url.rsplit("/", 1)[-1], auth))
+        if url.startswith("https://auth.example/token?"):
+            return json.dumps({"token": next(tokens)}).encode()
+        if auth in (None, "Bearer expired"):
+            raise _http_error(401, CHALLENGE)
+        return b"ok"
+
+    monkeypatch.setattr(pin_only, "_fetch", fake)
+
+    for path in ("manifests/x", "blobs/y"):
+        pin_only._registry_get("registry.example", "a/b", path, "*/*")
+    pin_only._TOKENS[("registry.example", "a/b")] = "expired"
+    pin_only._registry_get("registry.example", "a/b", "blobs/z", "*/*")
+
+    challenged = [r for r in requests if r[0].startswith("token?")]
+    assert len(challenged) == 2
+    assert ("y", "Bearer first") in requests
+    assert requests[-1] == ("z", "Bearer second")
 
 
 def test_registry_get_needs_no_token_when_none_is_asked(monkeypatch):
