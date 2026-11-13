@@ -57,7 +57,7 @@ help:
 COVERAGE_DIR ?= coverage
 PODMAN ?= $(if $(CONTAINER_HOST),podman-remote,podman)
 # renovate: datasource=docker depName=docker.io/library/python
-PYTHON_IMAGE ?= docker.io/library/python:3.14-trixie@sha256:9647bab404235fee82aa7f30d5f73e9f28c64c608442e63b0806c6bdd8b33528
+PYTHON_IMAGE ?= docker.io/library/python:3.14-trixie@sha256:1cef1664561971647b94fedf437145415991d4feeda09c81df12acfad8829cde
 # renovate: datasource=docker depName=docker.io/kcov/kcov
 KCOV_IMAGE ?= docker.io/kcov/kcov:latest@sha256:481289ae32e55e5b733019515acd10948a4f76dfed381765577db909664fc603
 # The shell scripts kcov measures, found rather than listed, so a new one
