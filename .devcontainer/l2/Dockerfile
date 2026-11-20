@@ -2,7 +2,7 @@
 # credentials (see docs/LAYERS.md in devcontainer-airlock). The test suite
 # does not run here: `make test` runs it in the pinned Python image, through
 # the L2 engine, so this image carries nothing for it.
-ARG L2_IMAGE=ghcr.io/ivan-pinatti-labs/airlock-l2@sha256:63c1bec2e512bfe5169369ddf0006e0ab1664be42c79c2c39299139e3fcb97f4
+ARG L2_IMAGE=ghcr.io/ivan-pinatti-labs/airlock-l2@sha256:cd641384bdb021111b74496c2ed4db0d02fc7cebd9debb21b0f5ff8cc5aae3dc
 # hadolint ignore=DL3006
 FROM ${L2_IMAGE}
 # The base image already ends as the unprivileged workbench user; say so here
